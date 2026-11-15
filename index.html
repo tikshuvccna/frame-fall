@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#7b6cf6">
+  <link rel="icon" href="data:,">
+  <title>המרוץ לכתר</title>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div id="pad"><div id="stick"><div id="knob"></div></div></div>
+  <div id="hud" class="hide">
+    <div id="question" dir="auto"></div>
+    <div id="chips"><span id="rank"></span><span id="qual"></span></div>
+    <div id="bar"><i></i></div>
+  </div>
+  <div id="toast"></div>
+  <div id="count"></div>
+  <button id="btnJump" type="button" class="act">קפיצה</button>
+  <button id="btnDive" type="button" class="act">זינוק</button>
+  <div id="card" class="card">
+    <h1>המרוץ לכתר</h1>
+    <p id="load">טוען...</p>
+    <div id="intro" class="hide">
+      <div id="levels"></div>
+      <p id="tip"></p>
+      <p class="keys">מקלדת: חיצים לריצה, רווח לקפיצה, Shift לזינוק</p>
+      <div id="pick"></div>
+      <button id="go" type="button" class="big">יוצאים לדרך</button>
+    </div>
+  </div>
+  <div id="end" class="card hide">
+    <h1 id="endTitle"></h1>
+    <p id="stars"></p>
+    <p id="endLine"></p>
+    <div class="row">
+      <button id="next" type="button" class="big">לשלב הבא</button>
+      <button id="again" type="button" class="big alt">עוד סיבוב</button>
+      <button id="menu" type="button" class="big alt">כל השלבים</button>
+    </div>
+  </div>
+  <div id="mini" class="card hide">
+    <h1 id="miniTitle"></h1>
+    <p class="keys2">רוצו אל הדלת עם התשובה הנכונה. מדליה מקבלים עם 3 טעויות לכל היותר.</p>
+    <div id="miniLevels"></div>
+    <div class="row">
+      <button id="miniLearn" type="button" class="big alt">ללמוד שוב</button>
+      <button id="miniBack" type="button" class="big alt">חזרה למופע</button>
+    </div>
+  </div>
+  <div id="lesson" class="hide"></div>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

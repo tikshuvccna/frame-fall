@@ -1,0 +1,7 @@
+art/_raw/
+node_modules
+dist
+__pycache__
+tmp/
+*.log
+.playwright-mcp
