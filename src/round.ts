@@ -9,6 +9,8 @@ import { CHAR_TYPES, kit } from './models';
 import { sfx } from './sfx';
 import { textTexture } from './toon';
 import { Tile } from './blocks';
+import { Pickups } from './collect';
+import { HATS } from './wear';
 import { Box, World, type Advice, type Fx, type Ground, type Hazard, type Solid } from './world';
 
 export const RUNNERS = 20;
@@ -25,7 +27,7 @@ export const THEMES: Record<string, Theme> = {
 
 export interface LevelDef {
   id: string; title: string; tip: string;
-  mode: 'race' | 'survive';
+  mode: 'race' | 'survive' | 'collect';
   qualify: number;
   theme: keyof typeof THEMES;
   /** survive: seconds until the round ends. race: time limit. */
@@ -41,7 +43,9 @@ interface Checkpoint { z: number; rz: number; y: number; sx: number; x: number }
 interface Bot { skill: number; pace: number; lane: number; jumpCool: number; planT: number; dx: number; dz: number; speed: number; heading: number; falls: number; fallCp: number }
 
 export type Phase = 'ready' | 'count' | 'race' | 'done';
-export interface Result { place: number; qualified: boolean; falls: number; time: number; stars: number }
+export interface Result { place: number; qualified: boolean; falls: number; time: number; stars: number; coins: number; card: boolean }
+/** How the player looks, and whether the round hides a knowledge card. */
+export interface Look { hat?: string | null; paint?: [string, string] | null; card?: boolean }
 
 const CANDS = [0, 0.3, -0.3, 0.65, -0.65, 1.05, -1.05, 1.5, -1.5];
 const CANDS_S = [...CANDS, 2.2, -2.2, 3.14];
@@ -52,7 +56,7 @@ export class Round {
   readonly world = new World(this.scene);
   readonly actors: Actor[] = [];
   readonly title: string;
-  readonly mode: 'race' | 'survive';
+  readonly mode: 'race' | 'survive' | 'collect';
   readonly qualify: number;
   player!: Actor;
   phase: Phase = 'ready';
@@ -64,6 +68,7 @@ export class Round {
   chipsFn: (() => [string, string]) | null = null;
   starsFn: (() => number) | null = null;
   readonly count: number;
+  pickups!: Pickups;
   falls = 0;
   result: Result | null = null;
   onCount?: (n: number) => void;
@@ -74,6 +79,8 @@ export class Round {
   killY = -16;
   /** survive: bots like to stay within this distance of the centre (0 = anywhere). */
   arenaR = 0;
+  /** collect rounds: where coins appear [x, z, half size]. */
+  area: [number, number, number] = [0, 0, 10];
   camBack = 1; camUp = 1; camAhead = 5.5;
   spawn: ((i: number) => [number, number, number]) | null = null;
   floodY = -999; floodSpeed = 0; floodDelay = 0;
@@ -102,9 +109,9 @@ export class Round {
     sound: (n) => { if (n === 'boing') sfx.boing(); else sfx.whack(); },
   };
 
-  constructor(readonly def: LevelDef, playerType: string, private auto = false) {
+  constructor(readonly def: LevelDef, playerType: string, private auto = false, private look: Look = {}) {
     this.title = def.title; this.mode = def.mode; this.qualify = def.qualify;
-    this.limit = def.time ?? (def.mode === 'race' ? 170 : 75);
+    this.limit = def.time ?? (def.mode === 'race' ? 170 : def.mode === 'collect' ? 60 : 75);
     this.assist = def.assist ?? 3;
     this.count = def.runners ?? RUNNERS;
     this.alive = this.count;
@@ -112,6 +119,7 @@ export class Round {
     def.build(this);
     if (this.floodSpeed > 0) this.buildFlood();
     this.spawnRunners(playerType);
+    this.pickups = new Pickups(this.scene, this.world, this.mode, def.id, this.finishZ, !!look.card, this.area);
     const ml = new THREE.Mesh(this.marker.geometry, new THREE.MeshBasicMaterial({ color: 0x2a2036, side: THREE.BackSide }));
     ml.scale.setScalar(1.25);
     this.marker.add(ml);
@@ -208,7 +216,11 @@ export class Round {
     for (let i = 0; i < this.count; i++) {
       const isP = i === 0;
       const type = isP ? playerType : CHAR_TYPES[i % CHAR_TYPES.length];
-      const a = new Actor(type, isP, isP ? undefined : TINTS[(i * 5) % TINTS.length], isP ? undefined : (i % 3 === 0 ? TINTS[(i * 7 + 3) % TINTS.length] : undefined));
+      const pt = isP ? this.look.paint : null;
+      const a = new Actor(type, isP, isP ? pt?.[0] : TINTS[(i * 5) % TINTS.length], isP ? pt?.[1] : (i % 3 === 0 ? TINTS[(i * 7 + 3) % TINTS.length] : undefined));
+      const hats = Object.keys(HATS).filter((h) => h !== 'crown');
+      if (isP) a.wear(this.look.hat, '#ff6b6b');
+      else if (i % 5 === 2 || i % 7 === 3) a.wear(hats[(i * 3) % hats.length], TINTS[(i * 11) % TINTS.length]);
       if (this.spawn) { const [x, y, z] = this.spawn(i); a.x = x; a.y = y; a.z = z; }
       else {
         const slot = this.count === 1 ? 3.5 : isP ? 7 : i <= 7 ? i - 1 : i;          // the player starts in the middle of the second line
@@ -262,6 +274,10 @@ export class Round {
       if (!a.finished && racing && this.mode === 'race' && a.z < this.finishZ && a.y > this.finishY - 1) this.finish(a);
     }
     this.collidePairs();
+    this.pickups.update(this.raceT, dt, this.phase === 'race' && this.doneT < 0, this.player, {
+      coin: () => sfx.coin(),
+      card: (x, y, z) => { sfx.card(); this.burst(x, y, z); this.onToast?.('מצאת קלף ידע!', true); },
+    }, this.actors);
     for (const a of this.actors) { if (a.eliminated) continue; this.ground(a, false); a.animate(dt); }
     this.stepConfetti(dt);
     for (const f of this.floaters) f.o.position.y = f.y + Math.sin(this.time * 0.6 + f.ph) * 0.6;
@@ -286,6 +302,12 @@ export class Round {
         sfx.win(); p.cheer();
         this.burst(p.x, p.y + 2, p.z); this.burst(p.x - 3, p.y + 3, p.z - 2); this.burst(p.x + 3, p.y + 3, p.z - 2);
         for (const a of this.actors) if (!a.eliminated) a.finished = true;
+      }
+    } else if (this.mode === 'collect') {
+      if (this.raceT >= this.limit) {
+        this.won = this.rank() <= this.qualify; this.doneT = 0;
+        if (this.won) { sfx.win(); p.cheer(); this.burst(p.x, p.y + 2, p.z); } else sfx.lose();
+        for (const a of this.actors) a.finished = true;
       }
     } else if (this.raceT >= this.limit && !p.finished) { sfx.lose(); this.doneT = 0.6; }
   }
@@ -321,14 +343,15 @@ export class Round {
     a.x = c.x + (Math.random() - 0.5) * c.sx; a.z = c.rz + Math.random() * 1.2; a.y = c.y + 6;
     a.vx = a.vz = 0; a.vy = 0;
     a.mode = 'normal'; a.stun = 0.2; a.grounded = false;
-    if (a.isPlayer) { this.falls++; this.onToast?.('נפלת! חוזרים לנקודה האחרונה', false); }
+    const lost = this.mode === 'collect' ? this.pickups.drop(a, 3) : 0;
+    if (a.isPlayer) { this.falls++; sfx.fall(); this.onToast?.(lost ? 'נפלת! איבדת ' + lost + ' מטבעות' : 'נפלת! חוזרים לנקודה האחרונה', false); }
   }
 
   private eliminate(a: Actor): void {
     a.eliminated = true;
     a.place = this.alive--;
     a.root.visible = false; a.shadow.visible = false;
-    if (a.isPlayer && this.doneT < 0) { this.falls++; sfx.lose(); this.onToast?.('נפלת מהבמה', false); this.doneT = 0.5; }
+    if (a.isPlayer && this.doneT < 0) { this.falls++; sfx.out(); sfx.lose(); this.onToast?.('נפלת מהבמה', false); this.doneT = 0.5; }
   }
 
   private collidePairs(): void {
@@ -369,8 +392,16 @@ export class Round {
 
   /** Choose a direction: probe the floor along a fan of headings and take the best one. */
   private plan(a: Actor, b: Bot): void {
-    const surv = this.mode === 'survive';
-    if (surv) {
+    const surv = this.mode !== 'race';
+    if (this.mode === 'collect') {
+      let best = 1e9, tx = 0, tz = 0;
+      for (const c of this.pickups.coins) {
+        if (c.taken || Math.abs(c.y - 1 - a.y) > 2.5) continue;
+        const d = Math.hypot(c.x - a.x, c.z - a.z) * (0.8 + Math.random() * (1.2 - b.skill));
+        if (d < best) { best = d; tx = c.x; tz = c.z; }
+      }
+      if (best < 1e9) b.heading = Math.atan2(tx - a.x, -(tz - a.z));
+    } else if (surv) {
       b.heading += (Math.random() - 0.5) * 0.8;
       const under = this.world.groundAt(a.x, a.y, a.z)?.solid;      // on a tile that still holds: stay until it is about to drop
       if (under instanceof Tile && (under.state === 0 || under.t < under.delay - 0.4)) { b.speed = 0; return; }
@@ -379,7 +410,7 @@ export class Round {
     let best = -1e9, bang = base;
     for (const th of surv ? CANDS_S : CANDS) {
       const ang = base + th, ux = Math.sin(ang), uz = -Math.cos(ang);
-      let score = (surv ? 0.35 : 1) * Math.cos(th) + (Math.random() - 0.5) * 0.25 * (1.1 - b.skill);
+      let score = (this.mode === 'survive' ? 0.35 : 1) * Math.cos(th) + (Math.random() - 0.5) * 0.25 * (1.1 - b.skill);
       let gap = -1, land = -1;
       for (let k = 1; k <= 6; k++) {
         const d = k * 0.7, g = this.okGround(a, a.x + ux * d, a.z + uz * d);
@@ -452,7 +483,7 @@ export class Round {
   private afterFinish(a: Actor): void {
     const c = a.ctl;
     c.ix = c.iz = 0; c.jump = c.dive = false;
-    if (this.mode === 'survive') { a.cheer(); return; }
+    if (this.mode !== 'race') { a.cheer(); return; }
     const tz = this.finishZ - 3.5 - (a.place % 4) * 1.6, txx = -6 + ((a.place * 5) % 9) * 1.5;
     const dx = txx - a.x, dz = tz - a.z, d = Math.hypot(dx, dz);
     if (d > 0.6 && a.mode === 'normal' && a.grounded) { a.vx = dx / d * 4; a.vz = dz / d * 4; }
@@ -465,10 +496,10 @@ export class Round {
     let stars = 0;
     if (this.won) {
       if (this.starsFn) { stars = this.starsFn(); if (stars === 0) this.won = false; }
-      else if (this.mode === 'race') stars = place === 1 ? 3 : place <= Math.ceil(this.qualify / 2) ? 2 : 1;
+      else if (this.mode !== 'survive') stars = place === 1 ? 3 : place <= Math.ceil(this.qualify / 2) ? 2 : 1;
       else stars = this.alive <= this.qualify ? (this.falls === 0 ? 3 : 2) : 2;
     }
-    this.result = { place, qualified: this.won, falls: this.falls, time: this.raceT, stars };
+    this.result = { place, qualified: this.won, falls: this.falls, time: this.raceT, stars, coins: this.pickups.got, card: this.pickups.cardGot };
     this.onDone?.(this.result);
   }
 
@@ -476,18 +507,20 @@ export class Round {
   rank(): number {
     const p = this.player;
     if (this.mode === 'survive') return p.eliminated ? p.place : 1;
+    if (this.mode === 'collect') { const sc = this.pickups.score, me = sc.get(p) ?? 0; return 1 + this.actors.filter((x) => x !== p && (sc.get(x) ?? 0) > me).length; }
     if (p.finished || p.eliminated) return p.place;
     return 1 + this.actors.filter((x) => x !== p && !x.eliminated && (x.finished || x.z < p.z)).length;
   }
   /** How far along the round the player is, 0 to 1. */
   progress(): number {
-    if (this.mode === 'survive') return THREE.MathUtils.clamp(this.raceT / this.limit, 0, 1);
+    if (this.mode !== 'race') return THREE.MathUtils.clamp(this.raceT / this.limit, 0, 1);
     return THREE.MathUtils.clamp((4 - this.player.z) / (4 - this.finishZ), 0, 1);
   }
   /** Short status texts for the two chips of the HUD. */
   chips(): [string, string] {
     if (this.chipsFn) return this.chipsFn();
     if (this.mode === 'survive') return ['נשארו ' + this.alive, 'עולים ' + this.qualify];
+    if (this.mode === 'collect') return ['מקום ' + this.rank(), 'עוד ' + Math.max(0, Math.ceil(this.limit - this.raceT)) + ' שניות · עולים ' + this.qualify];
     return ['מקום ' + this.rank(), 'עלו ' + Math.min(this.finishedCount, this.qualify) + ' מתוך ' + this.qualify];
   }
 

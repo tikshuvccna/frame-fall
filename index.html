@@ -12,7 +12,7 @@
   <div id="pad"><div id="stick"><div id="knob"></div></div></div>
   <div id="hud" class="hide">
     <div id="question" dir="auto"></div>
-    <div id="chips"><span id="rank"></span><span id="qual"></span></div>
+    <div id="chips"><span id="rank"></span><span id="qual"></span><span id="coinChip"></span></div>
     <div id="bar"><i></i></div>
   </div>
   <div id="toast"></div>
@@ -20,13 +20,20 @@
   <button id="btnJump" type="button" class="act">קפיצה</button>
   <button id="btnDive" type="button" class="act">זינוק</button>
   <div id="card" class="card">
-    <h1>המרוץ לכתר</h1>
+    <div class="top"><span id="purse"></span><h1>המרוץ לכתר</h1><span id="who"></span></div>
     <p id="load">טוען...</p>
     <div id="intro" class="hide">
       <div id="levels"></div>
       <p id="tip"></p>
       <p class="keys">מקלדת: חיצים לריצה, רווח לקפיצה, Shift לזינוק</p>
-      <div id="pick"></div>
+      <div id="nav">
+        <button type="button" data-s="locker"><i>👕</i>ארונית</button>
+        <button type="button" data-s="prizes"><i>🏆</i>פרסים</button>
+        <button type="button" data-s="album"><i>🃏</i>אלבום</button>
+        <button type="button" data-s="records"><i>⏱️</i>שיאים</button>
+        <button type="button" data-s="settings"><i>⚙️</i>הגדרות</button>
+        <button type="button" data-s="credits"><i>✨</i>קרדיטים</button>
+      </div>
       <button id="go" type="button" class="big">יוצאים לדרך</button>
     </div>
   </div>
@@ -34,6 +41,8 @@
     <h1 id="endTitle"></h1>
     <p id="stars"></p>
     <p id="endLine"></p>
+    <p id="endGain"></p>
+    <p id="endPurse"></p>
     <div class="row">
       <button id="next" type="button" class="big">לשלב הבא</button>
       <button id="again" type="button" class="big alt">עוד סיבוב</button>
@@ -50,6 +59,15 @@
     </div>
   </div>
   <div id="lesson" class="hide"></div>
+  <div id="panel" class="hide"></div>
+  <div id="prize" class="card hide">
+    <h1>פרס חדש!</h1>
+    <p id="prizeList"></p>
+    <div class="row">
+      <button id="prizeGo" type="button" class="big">לארונית</button>
+      <button id="prizeOk" type="button" class="big alt">המשך</button>
+    </div>
+  </div>
   <script type="module" src="./src/main.ts"></script>
 </body>
 </html>

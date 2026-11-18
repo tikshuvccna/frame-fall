@@ -1,8 +1,8 @@
 /**
- * The ten rounds of the show. Each one builds its course on a Round (see round.ts).
+ * The twelve rounds of the show. Each one builds its course on a Round (see round.ts).
  * Courses run toward -Z from the start pad (z 10 to -14). Survival rounds use an arena around the origin.
  */
-import { DoorWall, Tile, Wind } from './blocks';
+import { DoorWall, Seesaw, Tile, Wind } from './blocks';
 import { TINTS, type LevelDef, type Round } from './round';
 import { BallRun, Box, Bumper, Disc, Hammer, Spinner } from './world';
 
@@ -275,4 +275,47 @@ const crown: LevelDef = {
   },
 };
 
-export const LEVELS: LevelDef[] = [cables, doorDash, spin, wind, chute, hex, tiptoe, climb, rush, crown];
+// ------------------------------------------------------------------ Seesaws (race)
+const seesaw: LevelDef = {
+  id: 'seesaw', title: 'הנדנדות', tip: 'הקרשים נוטים לצד שיש בו יותר רצים. שמרו על איזון!', mode: 'race', qualify: 10, theme: 'sunset',
+  build(r) {
+    r.startPad('sun');
+    const cols = ['#ff8fb8', '#6fd3ff', '#ffd23f', '#8be37d', '#b79cff'];
+    [-21, -34, -47].forEach((z, i) => r.add(new Seesaw(0, 0, z, 4.4, 5.6, cols[i])));
+    r.checkpoint(-28.6, 0, 4, 0, -31);
+    r.checkpoint(-41.6, 0, 4, 0, -44);
+    r.floor(0, 0, -53.2, -62.2, 6, { pal: 'mint' });
+    r.checkpoint(-54, 0, 5, 0, -57);
+    bumpers(r, 0, [[-3, -58], [3, -59.5]]);
+    [-69, -82].forEach((z, i) => { for (const sx of [-1, 1]) r.add(new Seesaw(sx * 3.6, 0, z, 3, 5.6, cols[(i * 2 + (sx > 0 ? 1 : 0) + 3) % 5])); });
+    r.checkpoint(-76.6, 0, 6, 0, -79.5);
+    r.add(new Seesaw(0, 0, -96, 6.5, 6.6, '#ff8fb8', 0.3));
+    r.checkpoint(-89.6, 0, 4, 0, -93);
+    r.finishPad(-112, 0, 'sun', 9);
+    r.dress(-125);
+  },
+};
+
+// ------------------------------------------------------------------ Coin Hunt (collect)
+const hunt: LevelDef = {
+  id: 'hunt', title: 'ציד המטבעות', tip: 'אספו כמה שיותר מטבעות בדקה. מי שנופל מאבד 3. קפצו מעל המוט!', mode: 'collect', qualify: 10, theme: 'mint', time: 60,
+  build(r) {
+    r.add(new Box(0, 0, 0, 11, 11, { pal: 'cream' }));
+    for (const [x, z] of [[-7.6, -7.6], [7.6, -7.6], [-7.6, 7.6], [7.6, 7.6]]) r.add(new Box(x, 1.3, z, 2.4, 2.4, { pal: 'violet', h: 1.3 }));
+    const bar = r.add(new Spinner(0, 0, 0, 0, '#ff8fb8', 10.8));
+    bar.power = 0.6;
+    r.tick((t) => { bar.w = Math.min(1.25, 0.55 + t * 0.012); });
+    bumpers(r, 0, [[0, -5], [0, 5], [-5, 0], [5, 0]]);
+    r.area = [0, 0, 10.4];
+    r.arenaR = 11;
+    r.spawn = (i) => ring(i, 3.2, 1.9);
+    r.killY = -9; r.camBack = 1.3; r.camUp = 1.5; r.camAhead = 0.5;
+    for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4;
+      r.deco('balloon', Math.sin(a) * 16, 2 + (k % 3) * 2, Math.cos(a) * 16 - 4, 1, TINTS[k], 0, true);
+      r.deco('cloud', Math.sin(a + 0.3) * (34 + (k % 3) * 9), -6 + (k % 4) * 6, Math.cos(a + 0.3) * 34 - 20, 2 + (k % 2), undefined, 0, true);
+    }
+  },
+};
+
+export const LEVELS: LevelDef[] = [cables, doorDash, spin, wind, chute, seesaw, hex, tiptoe, climb, hunt, rush, crown];

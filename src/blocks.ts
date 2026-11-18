@@ -243,3 +243,59 @@ export class Wind extends Hazard {
     a.bump(Math.sign(this.v), 0, 0.3);
   }
 }
+
+/**
+ * A seesaw plank that tips side to side under the weight of the runners on it (pivot along Z).
+ * The tilt carries runners downhill, so a crowd on one side throws everyone toward that edge.
+ */
+export class Seesaw extends Solid {
+  ang = 0;
+  private w = 0;
+  private load = 0;
+  private plank: THREE.Group;
+  constructor(public cx: number, public top: number, public cz: number, public hx: number, public hz: number, color: string, private maxAng = 0.36) {
+    super();
+    this.grip = 0.85;
+    this.plank = new THREE.Group();
+    const stripes = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, 0.5, hz * 2), [mat('#ffffff'), mat('#ffffff'), mat(color), mat('#ffffff'), mat('#ffffff'), mat('#ffffff')]);
+    body.position.y = -0.25;
+    stripes.add(body);
+    for (let k = -2; k <= 2; k++) {            // painted lines across the plank show the tilt
+      const s = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.02, hz * 2 - 0.4), mat('#ffffff'));
+      s.position.set(k * hx * 0.4, 0.01, 0);
+      stripes.add(s);
+    }
+    this.plank.add(stripes);
+    this.mesh.add(this.plank);
+    const prop = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, hz * 1.2, 3).rotateX(Math.PI / 2).rotateZ(Math.PI), mat('#7b6cf6'));
+    prop.position.y = -1.75;
+    this.mesh.add(prop);
+    this.mesh.position.set(cx, top, cz);
+  }
+  topAt(x: number, z: number): number | null {
+    if (Math.abs(x - this.cx) > this.hx * Math.cos(this.ang) + 0.1 || Math.abs(z - this.cz) > this.hz + 0.1) return null;
+    return this.top + Math.tan(this.ang) * (x - this.cx);
+  }
+  bottom(): number { return this.top - 0.5 - Math.abs(Math.sin(this.ang)) * this.hx; }
+  refTop(): number { return this.top; }
+  pushOut(a: Actor): boolean {
+    const dx = a.x - this.cx, dz = a.z - this.cz, ex = this.hx + RADIUS, ez = this.hz + RADIUS;
+    if (Math.abs(dx) >= ex || Math.abs(dz) >= ez) return false;
+    if (ez - Math.abs(dz) < ex - Math.abs(dx)) a.z = this.cz + Math.sign(dz || 1) * ez;
+    else a.x = this.cx + Math.sign(dx || 1) * ex;
+    return true;
+  }
+  /** Each runner standing on it pushes its side down. */
+  stand(a: Actor): void { this.load += (a.x - this.cx) / this.hx; }
+  velAt(): [number, number] { return [-Math.sin(this.ang) * 9.5, 0]; }
+  update(_t: number, dt: number): void {
+    if (dt <= 0) return;
+    const torque = -this.load * 1.1 - this.ang * 5.5 - this.w * 1.6;
+    this.load = 0;
+    this.w += torque * dt;
+    this.ang += this.w * dt;
+    if (Math.abs(this.ang) > this.maxAng) { this.ang = Math.sign(this.ang) * this.maxAng; this.w *= -0.2; }
+    this.plank.rotation.z = this.ang;
+  }
+}

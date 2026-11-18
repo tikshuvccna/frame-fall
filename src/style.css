@@ -141,3 +141,89 @@ body.touch .keys { display: none; }
 .lhead .tag { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
 .lhead .x { flex: none; } .dots { flex: 1 0 auto; }
 @media (max-width: 480px) { .dots i { width: 9px; height: 9px; } .dots { gap: 3px; } .bitrow { gap: 3px; } .bit.gap { margin-left: 8px; } .bit button { width: 8.2vw; border-width: 2px; } .wg { padding: 10px 6px; } }
+
+/* board header: coins on one side, the runner's name on the other; backstage buttons under the board */
+.card .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.card .top h1 { flex: 1; margin: 0 0 4px; }
+#purse, #who { font-weight: 900; font-size: 14px; background: #fff; border: 3px solid var(--ink); border-radius: 999px; padding: 2px 10px; white-space: nowrap; box-shadow: 0 3px 0 var(--ink); }
+#purse { background: var(--sun); direction: ltr; }
+#who { max-width: 30%; overflow: hidden; text-overflow: ellipsis; }
+#nav { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 6px 0 2px; }
+#nav button { font: inherit; font-weight: 800; font-size: 12px; padding: 4px 2px; border-radius: 12px; border: 3px solid var(--ink); background: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; }
+#nav button i { font-style: normal; font-size: 18px; line-height: 1.1; }
+#nav button:hover { background: #f1edff; }
+#levels button.hascard::before { content: "🃏"; position: absolute; top: -9px; inset-inline-end: -6px; font-size: 14px; }
+#coinChip { background: var(--sun) !important; direction: ltr; }
+#endGain { margin: 4px 0; font-weight: 800; color: #177a39; font-size: clamp(14px, 3vw, 17px); }
+#endPurse { margin: 0; font-weight: 900; font-size: 15px; direction: ltr; }
+#prize { z-index: 30; background: #fff6cc; transform: translate(-50%, -50%) rotate(1.5deg); animation: prizeIn 0.5s cubic-bezier(.3, 1.8, .5, 1); }
+#prizeList { font-size: clamp(18px, 4.4vw, 24px); font-weight: 900; color: var(--violet); }
+@keyframes prizeIn { from { transform: translate(-50%, -50%) scale(0.4) rotate(-10deg); } }
+
+/* backstage panel: a clipboard docked to the side (wide screens) or the bottom (tall screens), never a centred card */
+#panel { position: fixed; top: 0; bottom: 0; right: 0; width: min(54vw, 560px); background: #fffdf6; border-left: 6px solid var(--ink); box-shadow: -8px 0 0 rgba(42, 32, 54, 0.25); display: flex; flex-direction: column; z-index: 20; touch-action: pan-y;
+  background-image: repeating-linear-gradient(0deg, transparent 0 31px, #efe7ff 31px 32px); }
+@media (max-aspect-ratio: 1/1) { #panel { top: auto; left: 0; width: auto; height: 64vh; border-left: 0; border-top: 6px solid var(--ink); border-radius: 26px 26px 0 0; box-shadow: 0 -8px 0 rgba(42, 32, 54, 0.25); } }
+.phead { display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: var(--violet); border-bottom: 4px solid var(--ink); }
+.tabs { display: flex; gap: 4px; flex: 1; overflow-x: auto; scrollbar-width: none; }
+.tabs button { font: inherit; font-weight: 800; font-size: 13px; padding: 4px 9px; border-radius: 10px; border: 3px solid var(--ink); background: #e9e4ff; cursor: pointer; white-space: nowrap; }
+.tabs button.on { background: var(--sun); transform: translateY(-2px); box-shadow: 0 3px 0 var(--ink); }
+.phead .x { font: inherit; font-weight: 900; font-size: 13px; padding: 4px 12px; border-radius: 999px; border: 3px solid var(--ink); background: #fff; cursor: pointer; flex: none; }
+.pbody { flex: 1; overflow-y: auto; padding: 10px 14px 16px; touch-action: pan-y; }
+.purse { margin: 2px 0 8px; font-weight: 900; font-size: 18px; text-align: center; }
+.note { font-size: 13px; font-weight: 700; opacity: 0.7; text-align: center; margin: 10px 0 4px; }
+.kinds { display: flex; gap: 6px; justify-content: center; margin-bottom: 8px; }
+.kinds button { font: inherit; font-weight: 900; font-size: 15px; padding: 5px 16px; border-radius: 999px; border: 3px solid var(--ink); background: #fff; cursor: pointer; }
+.kinds button.on { background: var(--pink); }
+.shop { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.shop button { font: inherit; position: relative; min-height: 66px; padding: 6px 4px; border-radius: 16px; border: 3px solid var(--ink); background: #fff; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; box-shadow: 0 4px 0 var(--ink); }
+.shop button b { font-size: 15px; font-weight: 900; }
+.shop button span { font-size: 12px; font-weight: 700; line-height: 1.2; }
+.shop button.worn { background: var(--mint); }
+.shop button.buy span { direction: ltr; }
+.shop button.prize { background: #f3effa; border-style: dashed; box-shadow: none; }
+.shop button.prize span { color: #7b6cf6; }
+.shop button.no { animation: shake 0.3s; }
+.shop .sw { width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--ink); }
+.prizes { display: flex; flex-direction: column; gap: 6px; }
+.prizes > div { display: grid; grid-template-columns: 34px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; padding: 6px 10px; border-radius: 14px; border: 3px solid var(--ink); background: #fff; opacity: 0.75; }
+.prizes > div.got { background: #fff3b0; opacity: 1; }
+.prizes i { grid-row: span 2; font-style: normal; font-size: 24px; }
+.prizes b { font-size: 16px; } .prizes span { font-size: 13px; font-weight: 600; }
+.album { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.kcard { border: 3px solid var(--ink); border-radius: 14px; background: #ebe6f5; padding: 8px; min-height: 104px; display: flex; flex-direction: column; gap: 3px; text-align: center; }
+.kcard small { font-weight: 800; font-size: 11px; opacity: 0.6; }
+.kcard b { font-size: 22px; font-weight: 900; color: #a79fc0; }
+.kcard span { font-size: 12px; font-weight: 600; line-height: 1.35; opacity: 0.75; }
+.kcard.got { background: linear-gradient(160deg, #7b6cf6, #b79cff); color: #fff; box-shadow: 0 4px 0 var(--ink); }
+.kcard.got b { color: #ffd23f; font-size: 17px; } .kcard.got span { opacity: 1; font-size: 13px; }
+.sum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+.sum div { border: 3px solid var(--ink); border-radius: 14px; background: #fff; padding: 4px; display: flex; flex-direction: column; align-items: center; }
+.sum b { font-size: 18px; font-weight: 900; color: var(--violet); direction: ltr; } .sum span { font-size: 12px; font-weight: 700; }
+table.rec { width: 100%; border-collapse: collapse; font-size: 13px; font-weight: 700; background: #fff; border: 3px solid var(--ink); border-radius: 12px; overflow: hidden; }
+.rec th { background: var(--sun); padding: 4px; font-size: 12px; }
+.rec td { padding: 4px; border-top: 2px dashed #e0d8ef; text-align: center; }
+.rec td:first-child { text-align: right; white-space: nowrap; }
+.rec td.st { color: #e0a800; letter-spacing: 1px; }
+.set { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 8px; border-bottom: 2px dashed #e0d8ef; font-weight: 800; font-size: 16px; }
+.set input[type=range] { flex: 1; max-width: 220px; accent-color: var(--violet); height: 26px; }
+.set input[type=checkbox] { width: 24px; height: 24px; accent-color: var(--violet); }
+.set input[type=text] { font: inherit; font-size: 16px; padding: 4px 10px; border-radius: 10px; border: 3px solid var(--ink); width: 160px; }
+.big.danger { display: block; margin: 18px auto 0; background: #ffd9d9; font-size: 15px; }
+.credits { text-align: center; line-height: 1.6; font-weight: 600; font-size: 16px; }
+.credits p { margin: 6px 0; }
+.credits .ctitle { font-size: 28px; font-weight: 900; color: var(--violet); }
+.credits a { color: var(--violet); font-weight: 900; }
+.credits .thanks { font-weight: 900; margin-top: 14px; }
+.credits .small { font-size: 13px; opacity: 0.7; }
+body.preview #view { cursor: grab; }
+@media (max-width: 420px) { #nav { grid-template-columns: repeat(3, 1fr); } .sum b { font-size: 15px; } .rec { font-size: 12px; } }
+@media (max-height: 420px) { #nav { grid-template-columns: repeat(6, 1fr); gap: 4px; margin: 2px 0; } #nav button { flex-direction: row; justify-content: center; gap: 3px; padding: 2px; font-size: 11px; } #nav button i { font-size: 13px; }
+  .card .top h1 { font-size: 22px; } #purse, #who { font-size: 12px; padding: 1px 8px; } .phead { padding: 4px 8px; } .pbody { padding: 6px 10px 10px; } .shop button { min-height: 52px; } .kcard { min-height: 84px; } }
+
+.cn { display: inline-block; width: 0.95em; height: 0.95em; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff6b8, #ffcc33 45%, #d99a00); border: 2px solid var(--ink); vertical-align: -0.15em; margin-inline-end: 4px; box-sizing: border-box; }
+@media (max-width: 480px) { .tabs { display: grid; grid-template-columns: repeat(3, 1fr); overflow: visible; } .tabs button { padding: 3px 2px; font-size: 12px; } .tabs button.on { transform: none; } }
+@media (max-width: 420px) { #who { display: none; } .card .top h1 { font-size: 26px; } #nav button { flex-direction: row; justify-content: center; gap: 3px; padding: 3px 2px; } #nav button i { font-size: 14px; } #levels { margin: 4px 0; } #tip { min-height: 0; } }
+/* 17 tickets (12 rounds and 5 lessons): 6 a row on phones, 9 a row on short landscape screens */
+@media (max-width: 420px) { #levels { grid-template-columns: repeat(6, 1fr); gap: 4px; } #levels button { padding: 3px 1px; border-width: 2px; border-radius: 10px; } #levels button b { font-size: 16px; } #levels button span { font-size: 9px; } #levels button.lesson b { font-size: 10px; line-height: 16px; } #levels button i { font-size: 9px; min-height: 10px; } }
+@media (max-height: 420px) { #levels { grid-template-columns: repeat(9, 1fr) !important; } }

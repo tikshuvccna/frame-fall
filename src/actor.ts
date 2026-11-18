@@ -4,8 +4,11 @@
  */
 import * as THREE from 'three';
 import { charRig, type CharRig } from './models';
+import { makeHat } from './wear';
 
 export const RADIUS = 0.42;
+/** Where the skull ends, for heads whose model reaches higher (antennae, fibres). */
+const HAT_TOP: Record<string, number> = { ch_wave: 0.5, ch_fibra: 0.47, ch_robo: 0.45 };
 const RUN = 7.2;          // top run speed, m/s
 const ACC = 36;           // ground acceleration
 const AIR_ACC = 11;
@@ -97,6 +100,19 @@ export class Actor {
   }
 
   cheer(): void { this.cheerT = 0.001; }
+
+  private hatSpin: THREE.Object3D | null = null;
+  /** Put a hat on the head (see wear.ts). */
+  wear(id: string | null | undefined, tint?: string): void {
+    if (!id) return;
+    const H = this.rig.parts.Head, B = this.rig.parts.Body;
+    if (!H.geometry.boundingBox) H.geometry.computeBoundingBox();
+    const hb = H.geometry.boundingBox as THREE.Box3;
+    const small = hb.max.x - hb.min.x < 0.3;            // a tuft, not a head (the binary cube): wear it on the body
+    const h = makeHat(id, small ? B : H, tint, HAT_TOP[this.type]);
+    if (small && h && id !== 'shades') H.visible = false;
+    this.hatSpin = (h?.userData.spin as THREE.Object3D | undefined) ?? null;
+  }
 
   /** Shoot the runner upward (bounce pads). It keeps control. */
   launch(vy: number): void {
@@ -289,6 +305,8 @@ export class Actor {
     P.Body.position.y = R.Body.y + bob;
     P.Head.rotation.z = headTilt - roll * 0.6;
     P.Head.rotation.x = -pitch * 0.5;
+
+    if (this.hatSpin) this.hatSpin.rotation.y += dt * (6 + sp * 3);
 
     // blob shadow
     const gy = this.groundY;
