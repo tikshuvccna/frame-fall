@@ -9,7 +9,7 @@ import { LEVELS, PRACTICE } from './levels';
 import { clearGhosts, loadGhost, saveGhost } from './ghost';
 import { rng } from './collect';
 import { CHAR_TYPES, loadModels } from './models';
-import { playMusic, resumeMusic } from './music';
+import { playMusic, preload, resumeMusic } from './music';
 import { checkPrizes, claimSeason, ITEMS_SHOP, loadSave, PAINTS, payOnce, SEASON, SEASON_STEP, storeSave, xp, type Prize } from './profile';
 import { Round, RUNNERS, type LevelDef, type Result } from './round';
 import { coinify, openScreen, type ScreenCtx, type ScreenId } from './screens';
@@ -340,13 +340,14 @@ function begin(): void {
   const d = game?.def;
   playMusic(mini ? 'race' : d?.id === 'crown' || d?.id === 'storm' ? 'final' : d?.mode !== 'race' ? 'survive' : 'race');
   $('host').classList.remove('on');
+  preload('victory');
   game?.start();
 }
 
 function showEnd(r: Result): void {
   document.body.classList.remove('playing');
   $('hud').classList.add('hide');
-  playMusic('menu');
+  playMusic(r.qualified && !mini ? 'victory' : 'menu');
   $('stars').textContent = stars(r.stars);
   $('stars').classList.toggle('hide', r.stars === 0);
   const next = $('next');

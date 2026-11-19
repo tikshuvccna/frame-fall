@@ -46,8 +46,26 @@ export const TRACKS: Record<string, Track> = {
   },
 };
 
+// ------------------------------------------------------------------ recorded tracks (public/music/<name>.mp3, made with Flow Music)
+// A track that has a file plays the file (looping); one without it falls back to the synthesised pattern above.
+const files = new Map<string, AudioBuffer | null | Promise<void>>();
+const url = (n: string) => import.meta.env.BASE_URL + 'music/' + n + '.mp3';
+function fileOf(name: string): AudioBuffer | null | undefined {
+  const f = files.get(name);
+  return f instanceof AudioBuffer ? f : f === null ? null : undefined;
+}
+function fetchFile(name: string): void {
+  const ac = audioCtx();
+  if (!ac || files.has(name)) return;
+  files.set(name, fetch(url(name)).then((r) => (r.ok && /audio|octet/.test(r.headers.get('content-type') ?? '') ? r.arrayBuffer() : Promise.reject(new Error('no file'))))
+    .then((b) => ac.decodeAudioData(b)).then((buf) => { files.set(name, buf); if (wanted === name) { cur = null; playMusic(name); } })
+    .catch(() => { files.set(name, null); }));
+}
+const ONE_SHOT = new Set(['victory']);
+/** Start loading recorded tracks that will be needed soon (needs unlocked audio). */
+export function preload(...names: string[]): void { for (const n of names) fetchFile(n); }
 const hz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
-let cur: { name: string; tr: Track; gain: GainNode; step: number; next: number } | null = null;
+let cur: { name: string; tr: Track | null; gain: GainNode; step: number; next: number; src?: AudioBufferSourceNode } | null = null;
 let timer: number | null = null;
 let wanted: string | null = null;
 
@@ -57,13 +75,30 @@ export function playMusic(name: string | null): void {
   const ac = audioCtx(), bus = musicBus();
   if (!ac || !bus) return;
   if (cur && cur.name === name) return;
-  if (cur) { const g = cur.gain; g.gain.setTargetAtTime(0, ac.currentTime, 0.25); setTimeout(() => g.disconnect(), 1500); cur = null; }
+  if (cur) { const g = cur.gain, o = cur.src; g.gain.setTargetAtTime(0, ac.currentTime, 0.25); setTimeout(() => { try { o?.stop(); } catch { /* already stopped */ } g.disconnect(); }, 1500); cur = null; }
   if (!name) return;
+  fetchFile(name);
+  const buf = fileOf(name);
+  if (buf !== undefined && !buf && ONE_SHOT.has(name)) { playMusic('menu'); return; }      // no jingle file: just the menu music
+  if (buf === undefined && ONE_SHOT.has(name)) { wanted = 'menu'; playMusic('menu'); wanted = name; return; }   // not loaded yet: menu music, the jingle is skipped
   const gain = ac.createGain();
   gain.gain.setValueAtTime(0, ac.currentTime);
   gain.gain.setTargetAtTime(1, ac.currentTime, 0.3);
   gain.connect(bus);
-  cur = { name, tr: TRACKS[name], gain, step: 0, next: ac.currentTime + 0.1 };
+  if (buf) {                                                                       // a recorded track
+    const src = ac.createBufferSource();
+    src.buffer = buf; src.loop = !ONE_SHOT.has(name);
+    src.connect(gain); src.start();
+    if (ONE_SHOT.has(name)) {
+      const len = Math.min(buf.duration, 26);
+      gain.gain.setTargetAtTime(0, ac.currentTime + len - 2, 0.5);
+      src.stop(ac.currentTime + len);
+      src.onended = () => { if (wanted === name) playMusic('menu'); };
+    }
+    cur = { name, tr: null, gain, step: 0, next: 0, src };
+    return;
+  }
+  cur = { name, tr: TRACKS[name] ?? TRACKS.menu, gain, step: 0, next: ac.currentTime + 0.1 };     // the synthesised pattern, until a file arrives
   timer ??= window.setInterval(tick, 25);
 }
 /** Call after the first user gesture: starts the track that was asked for while audio was locked. */
@@ -71,11 +106,11 @@ export function resumeMusic(): void { const w = wanted; if (w && (!cur || cur.na
 
 function tick(): void {
   const ac = audioCtx();
-  if (!ac || !cur) return;
-  const c = cur, sp = 60 / c.tr.bpm / 4;
+  if (!ac || !cur || !cur.tr) return;
+  const tr = cur.tr, c = cur, sp = 60 / tr.bpm / 4;
   if (c.next < ac.currentTime - 0.2) c.next = ac.currentTime + 0.05;          // the tab slept: skip ahead
   while (c.next < ac.currentTime + 0.14) {
-    play(c.tr, c.step, c.next, sp, c.gain);
+    play(tr, c.step, c.next, sp, c.gain);
     c.step++; c.next += sp;
   }
 }
