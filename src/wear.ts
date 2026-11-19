@@ -20,7 +20,7 @@ function part(g: THREE.BufferGeometry, c: string, x = 0, y = 0, z = 0, ol = 0.02
 
 export const HATS: Record<string, string> = {
   cap: 'מצחייה', party: 'כובע מסיבה', phones: 'אוזניות', antenna: 'אנטנה', shades: 'משקפי שמש',
-  tophat: 'מגבעת', propeller: 'כובע מדחף', flower: 'פרח', crown: 'כתר',
+  tophat: 'מגבעת', propeller: 'כובע מדחף', flower: 'פרח', crown: 'כתר', halo: 'הילה', star: 'כוכב',
 };
 
 /** Build a hat for a head mesh. The returned group is already placed on the head. */
@@ -110,6 +110,25 @@ export function makeHat(id: string, head: THREE.Mesh, tint = '#ff6b6b', topY?: n
         o.add(part(new THREE.ConeGeometry(0.05, 0.12, 6), '#ffcc33', Math.cos(a) * 0.15, 0.14, Math.sin(a) * 0.15, 0.01));
         o.add(part(new THREE.SphereGeometry(0.025, 8, 6), k % 2 ? '#ff6b9d' : '#6fd3ff', Math.cos(a) * 0.17, 0.05, Math.sin(a) * 0.17, 0));
       }
+      break;
+    }
+    case 'halo': {
+      const h = part(new THREE.TorusGeometry(0.17, 0.035, 8, 28).rotateX(Math.PI / 2), '#fff1a0', 0, 0.16, 0, 0.012);
+      (h.material as THREE.MeshToonMaterial).emissive = new THREE.Color('#ffcc33');
+      o.add(h);
+      o.userData.bob = h;
+      break;
+    }
+    case 'star': {
+      o.add(part(new THREE.CylinderGeometry(0.012, 0.012, 0.2, 6), '#2a2036', 0, 0.1, 0, 0));
+      const shape = new THREE.Shape();
+      for (let k = 0; k < 10; k++) {
+        const a = (k / 10) * Math.PI * 2 + Math.PI / 2, rr = k % 2 ? 0.05 : 0.12;
+        if (k === 0) shape.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); else shape.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+      const st = part(new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: false }).translate(0, 0, -0.025), tint === '#ff6b6b' ? '#ffd23f' : tint, 0, 0.27, 0, 0.012);
+      o.add(st);
+      o.userData.spin = st;
       break;
     }
     default: return null;

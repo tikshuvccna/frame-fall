@@ -299,3 +299,98 @@ export class Seesaw extends Solid {
     this.plank.rotation.z = this.ang;
   }
 }
+
+/**
+ * A pusher: a block that waits inside a side wall, then punches out across the path and slowly pulls back.
+ * `side` is the wall it lives in (-1 left, +1 right); `edge` is the x of that edge of the floor.
+ */
+export class Pusher extends Hazard {
+  off = 0;                       // how far out the block is now (0 = hidden in the wall)
+  private v = 0;
+  private block: THREE.Group;
+  private hx = 1.1; private hz = 1.0; private H = 1.5;
+  constructor(public edge: number, public y: number, public z: number, public side: number, public reach: number, private period = 3, private phase = 0, color = '#ff8fb8') {
+    super();
+    const house = new THREE.Mesh(geo('pushHouse', () => new THREE.BoxGeometry(1.4, 2.6, 2.8)), mat('#7b6cf6'));
+    house.position.set(edge + side * 1.6, 1.3, 0);
+    this.mesh.add(house);
+    this.block = new THREE.Group();
+    const face = new THREE.Mesh(geo('pushBlock', () => new THREE.BoxGeometry(this.hx * 2, this.H, this.hz * 2)), mat(color));
+    face.position.y = this.H / 2;
+    const plate = new THREE.Mesh(geo('pushPlate', () => new THREE.BoxGeometry(0.12, this.H * 0.8, this.hz * 1.6)), mat('#ffffff'));
+    plate.position.set(-side * (this.hx + 0.04), this.H / 2, 0);
+    const rod = new THREE.Mesh(geo('pushRod', () => new THREE.CylinderGeometry(0.16, 0.16, 6, 8).rotateZ(Math.PI / 2)), mat('#c8c3d6'));
+    rod.position.set(side * (this.hx + 3), this.H / 2, 0);
+    this.block.add(face, plate, rod);
+    this.mesh.add(this.block);
+    this.mesh.position.set(0, y, z);
+    this.place();
+  }
+  /** Centre x of the block. */
+  bx(): number { return this.edge + this.side * (this.hx - this.off); }
+  private place(): void { this.block.position.x = this.bx(); }
+  /** Out distance as a function of time: rest, a fast punch, hold, slow pull back. */
+  private outAt(t: number): number {
+    const u = (((t + this.phase) % this.period) + this.period) % this.period / this.period;
+    if (u < 0.45) return 0;
+    if (u < 0.53) return this.reach * ((u - 0.45) / 0.08);
+    if (u < 0.68) return this.reach;
+    return this.reach * (1 - (u - 0.68) / 0.32);
+  }
+  update(t: number, dt: number): void {
+    const n = this.outAt(t);
+    this.v = dt > 0 ? (n - this.off) / dt : 0;
+    this.off = n;
+    this.place();
+  }
+  advise(a: Actor, skill: number, adv: Advice, t: number): void {
+    const dz = a.z - this.z;
+    if (dz < -0.5 || dz > 3.4 || Math.abs(a.y - this.y) > 2) return;
+    const when = t + Math.max(0, dz - 0.4) / Math.max(2, a.speed);
+    const lane = Math.abs(a.x - this.edge) < this.reach + 0.6;
+    if (lane && (this.outAt(when) > 0.4 || this.outAt(when + 0.3) > 0.4) && Math.random() < 0.5 + skill * 0.5) adv.speed = dz < 1.4 ? -0.3 : 0.05;
+  }
+  hit(a: Actor, fx: Fx): void {
+    if (a.y > this.y + this.H || a.y < this.y - 1) return;
+    const cx = this.bx(), dx = a.x - cx, dz = a.z - this.z;
+    const ex = this.hx + RADIUS, ez = this.hz + RADIUS;
+    if (Math.abs(dx) >= ex || Math.abs(dz) >= ez) return;
+    const out = -this.side;                                  // the direction the block punches
+    if (this.v * out > 2 && a.hitCool <= 0) {                 // punching: throw the runner across
+      a.x = cx + out * ex;
+      a.knock(out * (Math.abs(this.v) * 0.9 + 3), 6, a.vz * 0.3, 9);
+      a.hitCool = 0.5;
+      if (a.isPlayer) { fx.sound('whack'); fx.shake(0.4); }
+      return;
+    }
+    if (ex - Math.abs(dx) < ez - Math.abs(dz)) a.x = cx + Math.sign(dx || out) * ex;
+    else a.z = this.z + Math.sign(dz || 1) * ez;
+  }
+}
+
+/** A platform that comes and goes in a steady beat. It blinks before it goes, so the beat can be learned. */
+export class Blinker extends Solid {
+  private body: THREE.Mesh;
+  private vis = true;
+  constructor(public cx: number, public top: number, public cz: number, public r: number, color: string, private period = 4, private phase = 0, private onPart = 0.62) {
+    super();
+    this.body = new THREE.Mesh(geo('blink' + r, () => new THREE.BoxGeometry(r * 2, 0.5, r * 2)), [mat('#ffffff'), mat('#ffffff'), mat(color), mat('#ffffff'), mat('#ffffff'), mat('#ffffff')]);
+    this.body.position.y = -0.25;
+    this.mesh.add(this.body);
+    this.mesh.position.set(cx, top, cz);
+  }
+  /** 0..1 position inside the beat. */
+  private u(t: number): number { return (((t + this.phase) % this.period) + this.period) % this.period / this.period; }
+  topAt(x: number, z: number): number | null { return Math.abs(x - this.cx) <= this.r + 0.08 && Math.abs(z - this.cz) <= this.r + 0.08 ? this.top : null; }
+  bottom(): number { return this.top - 0.5; }
+  refTop(): number { return this.top; }
+  pushOut(): boolean { return false; }
+  update(t: number): void {
+    const u = this.u(t);
+    this.alive = u < this.onPart;
+    const warn = u > this.onPart - 0.22 && u < this.onPart;
+    const show = this.alive && (!warn || Math.sin(t * 28) > -0.2);
+    if (show !== this.vis) { this.vis = show; this.mesh.visible = show; }
+    this.mesh.position.y = this.top + (warn ? Math.sin(t * 50) * 0.04 : 0);
+  }
+}

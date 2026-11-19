@@ -15,3 +15,10 @@ Keyboard: arrows or WASD to run, Space to jump, Shift to dive. Touch: stick on t
 Add `?all` to the address to open every round and lesson. Test hooks: `?lv=N`, `?auto`, `?lesson=9`, `?mini=9`, `?screen=locker|prizes|album|records|settings|credits`.
 
 Built with Three.js, TypeScript and Vite. Characters and stage props were modelled in Blender (`art/blender`).
+
+## Added 2026-11-19
+- Practice round (🎓, with on-screen hints), 13th round "פסגת הסערה" (second final: pushers, blinking platforms, lifts).
+- Ghost of the best run (race rounds, stored in `crownrun.ghost.v1`), slow-motion finish, show host lines.
+- Daily show (4 open rounds, same for everyone each day, double coins, streak), season track (10 steps, earned only by playing and learning).
+- Celebrations (emotes) in the locker, new hats (halo, star), new prizes, accessibility options (less motion, big text).
+- New obstacles: `Pusher`, `Blinker` in `src/blocks.ts`.

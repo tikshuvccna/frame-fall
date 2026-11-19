@@ -1,8 +1,8 @@
 /**
- * The twelve rounds of the show. Each one builds its course on a Round (see round.ts).
+ * The thirteen rounds of the show (two finals), and the practice round. Each one builds its course on a Round (see round.ts).
  * Courses run toward -Z from the start pad (z 10 to -14). Survival rounds use an arena around the origin.
  */
-import { DoorWall, Seesaw, Tile, Wind } from './blocks';
+import { Blinker, DoorWall, Pusher, Seesaw, Tile, Wind } from './blocks';
 import { TINTS, type LevelDef, type Round } from './round';
 import { BallRun, Box, Bumper, Disc, Hammer, Spinner } from './world';
 
@@ -318,4 +318,76 @@ const hunt: LevelDef = {
   },
 };
 
-export const LEVELS: LevelDef[] = [cables, doorDash, spin, wind, chute, seesaw, hex, tiptoe, climb, hunt, rush, crown];
+
+// ------------------------------------------------------------------ Storm Peak (the second final)
+const storm: LevelDef = {
+  id: 'storm', title: 'פסגת הסערה', tip: 'הגמר השני! בוכנות, במות מהבהבות ומעליות. רק שלושה עולים לפסגה.', mode: 'race', qualify: 3, theme: 'candy',
+  build(r) {
+    r.startPad('violet');
+    r.floor(0, 0, -14, -36, 6.5, { pal: 'sky' });
+    [[-19, -1, 0], [-23.5, 1, 1.1], [-28, -1, 2.2], [-32.5, 1, 0.6]].forEach(([z, sd, ph], i) =>
+      r.add(new Pusher(sd * 6.5, 0, z, sd, 7.4, 2.8, ph, TINTS[(i * 4 + 1) % TINTS.length])));
+    r.checkpoint(-35, 0, 5, 0, -35.5);
+    // blinking platforms: three lanes, each on its own beat
+    const cols = ['#ffd23f', '#ff8fb8', '#6fd3ff'];
+    for (let row = 0; row < 4; row++) for (let lane = -1; lane <= 1; lane++)
+      r.add(new Blinker(lane * 4.2, 0, -40 - row * 4.4, 1.9, cols[lane + 1], 3.6, (lane + 1) * 1.2 + row * 0.6));
+    r.floor(0, 0, -55.5, -63, 7, { pal: 'mint' });
+    r.checkpoint(-56.5, 0, 5, 0, -58.5);
+    // lifts up to the high floor
+    for (let lane = -1; lane <= 1; lane++) {
+      const ph = (lane + 1) * 2.1;
+      r.add(new Box(lane * 4.4, 0, -66, 2, 2.4, { plain: cols[lane + 1], h: 0.8, move: (t) => [0, 1.65 - 1.65 * Math.cos(t * 1.1 + ph), 0] }));
+    }
+    r.floor(0, 3, -68.6, -86, 7, { pal: 'cream' });
+    r.checkpoint(-70, 3, 5, 0, -71.5);
+    r.add(new Wind(-7, 7, -74, -84, 3, 3.6, 3.2));
+    bumpers(r, 3, [[-3, -77], [3.2, -80.5], [-1, -84]]);
+    const ramp = r.floor(0, 3, -86, -104, 6, { rise: 3, conveyor: 1.8 });
+    r.add(new BallRun(ramp, -103, -88, [-4, -1.3, 1.3, 4], 4, BALLS));
+    r.floor(0, 6, -104, -122, 3.2, { pal: 'violet' });
+    r.checkpoint(-105, 6, 2.4, 0, -106.3);
+    [-109, -114, -119].forEach((z, i) => r.add(new Hammer(0, 6, z, 5.8, 0.72, 2.2, i * 1.4, TINTS[i * 3 + 2])));
+    r.add(new Pusher(3.2, 6, -121, 1, 4, 2.4, 0.5, '#ffd23f'));
+    r.finishPad(-130, 6, 'sun', 8);
+    r.dress(-142, 6);
+  },
+};
+
+// ------------------------------------------------------------------ Practice (before the show; alone, with hints)
+const touch = () => document.body.classList.contains('touch');
+export const PRACTICE: LevelDef = {
+  id: 'practice', title: 'אימון', tip: 'סיבוב קצר בלי לחץ: לומדים לרוץ, לקפוץ ולזנק.', mode: 'race', qualify: 1, runners: 1, theme: 'day', time: 400,
+  build(r) {
+    r.startPad('mint');
+    r.floor(0, 0, -14, -22, 6, { pal: 'sky' });
+    r.floor(0, 0, -25, -31, 6, { pal: 'cream' });
+    r.checkpoint(-25.5, 0, 4, 0, -27);
+    r.floor(0, 1, -31, -40, 6, { pal: 'violet', h: 2.2 });
+    r.checkpoint(-32, 1, 4, 0, -34);
+    r.floor(0, 1, -44, -60, 6, { pal: 'mint', h: 2.2 });
+    r.checkpoint(-44.5, 1, 4, 0, -46);
+    r.add(new Spinner(0, 1, -53, 1.0, '#ff8fb8', 4.6));
+    bumpers(r, 1, [[-4, -57], [4, -57]]);
+    r.floor(0, 1, -60, -70, 4, { conveyor: -2.6 });
+    r.finishPad(-76, 1, 'sun', 6);
+    r.dress(-90, 1);
+    const k = () => touch();
+    const tips: [number, () => string][] = [
+      [-13, () => 'רצים: ' + (k() ? 'גוררים אצבע בצד שמאל של המסך' : 'חיצים או WASD')],
+      [-23, () => 'קפיצה: ' + (k() ? 'הכפתור הצהוב' : 'רווח') + '. קפצו מעל הבור!'],
+      [-30, () => 'מדרגה גבוהה: קפצו עליה'],
+      [-41, () => 'בור! קפצו, ובאוויר ' + (k() ? 'לחצו זינוק' : 'לחצו Shift') + ' כדי לעוף רחוק'],
+      [-49, () => 'מוט מסתובב: קפצו מעליו כשהוא מגיע'],
+      [-59, () => 'מסוע: החצים מראים לאן הוא מושך'],
+      [-71, () => 'כמעט שם! מטבעות קונים בגדים בארונית'],
+      [-1e9, () => 'כל הכבוד! עכשיו אתם מוכנים למופע'],
+    ];
+    r.tick(() => { const z = r.player.z, t = tips.find(([zz]) => z > zz) ?? tips[tips.length - 1]; r.hud = t[1](); });
+    r.hud = tips[0][1]();
+    r.chipsFn = () => ['אימון', 'נפילות ' + r.falls];
+    r.starsFn = () => 1;
+  },
+};
+
+export const LEVELS: LevelDef[] = [cables, doorDash, spin, wind, chute, seesaw, hex, tiptoe, climb, hunt, rush, crown, storm];

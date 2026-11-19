@@ -11,7 +11,7 @@ if not os.path.exists(CHROME):
 prefix = sys.argv[1]
 sizes = [tuple(int(v) for v in s.split("x")) for s in (sys.argv[2] if len(sys.argv) > 2 else "1200x760").split(",")]
 rounds = [int(v) for v in sys.argv[3].split(",")] if len(sys.argv) > 3 and sys.argv[3] else []
-SCREENS = ["locker", "prizes", "album", "records", "settings", "credits"]
+SCREENS = ["locker", "season", "prizes", "album", "records", "settings", "credits"]
 OVER = """() => { const bad = []; document.querySelectorAll('#panel *, #card *').forEach(e => { const r = e.getBoundingClientRect(); if (r.width > 0 && (r.right > innerWidth + 1 || r.left < -1)) bad.push(e.tagName + '.' + e.className + ':' + e.textContent.slice(0, 16)); }); return bad.slice(0, 5); }"""
 STEP = """(n) => { const g = window.__ff.game; for (let i = 0; i < n && g.phase !== 'done'; i++) g.step(1 / 60);
   return { phase: g.phase, t: +g.raceT.toFixed(1), coins: g.pickups.got, placed: g.pickups.coins.length, card: !!g.pickups.card, cardGot: g.pickups.cardGot, res: g.result }; }"""

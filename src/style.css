@@ -227,3 +227,28 @@ body.preview #view { cursor: grab; }
 /* 17 tickets (12 rounds and 5 lessons): 6 a row on phones, 9 a row on short landscape screens */
 @media (max-width: 420px) { #levels { grid-template-columns: repeat(6, 1fr); gap: 4px; } #levels button { padding: 3px 1px; border-width: 2px; border-radius: 10px; } #levels button b { font-size: 16px; } #levels button span { font-size: 9px; } #levels button.lesson b { font-size: 10px; line-height: 16px; } #levels button i { font-size: 9px; min-height: 10px; } }
 @media (max-height: 420px) { #levels { grid-template-columns: repeat(9, 1fr) !important; } }
+
+/* host bubble, season strip, daily button, season screen, practice ticket, big text */
+#host { background: #fff; border: 3px solid var(--ink); border-radius: 16px; padding: 3px 14px; font-weight: 800; font-size: clamp(13px, 2.8vw, 18px); box-shadow: 0 3px 0 var(--ink); opacity: 0; transform: translateY(-6px); transition: opacity 0.2s, transform 0.2s; max-width: 92vw; text-align: center; }
+#host.on { opacity: 1; transform: none; }
+#season { display: block; width: 100%; font: inherit; font-weight: 800; font-size: 13px; background: #fff; border: 3px solid var(--ink); border-radius: 12px; padding: 3px 10px 5px; margin: 2px 0 4px; cursor: pointer; }
+#seasonBar { display: block; height: 8px; margin-top: 3px; background: #e9e4ff; border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; direction: ltr; }
+#seasonBar b { display: block; height: 100%; width: 0; background: var(--violet); }
+#daily { font-size: clamp(15px, 3.2vw, 19px); }
+#daily.lock { opacity: 0.55; }
+#levels button.practice { background: #fff3b0; }
+#levels button.practice b { font-size: 18px; }
+.sbar { height: 14px; background: #fff; border: 3px solid var(--ink); border-radius: 999px; overflow: hidden; direction: ltr; margin: 4px 0; }
+.sbar i { display: block; height: 100%; background: var(--violet); }
+.steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 10px 0; }
+.steps div { border: 3px solid var(--ink); border-radius: 12px; background: #fff; padding: 4px 2px; display: flex; flex-direction: column; align-items: center; gap: 1px; opacity: 0.7; min-width: 0; }
+.steps div.got { background: #fff3b0; opacity: 1; }
+.steps b { font-size: 18px; font-weight: 900; color: var(--violet); }
+.steps span { font-size: 11px; font-weight: 800; text-align: center; line-height: 1.2; }
+.steps i { font-style: normal; font-size: 12px; }
+.how { display: flex; flex-direction: column; gap: 2px; border: 3px dashed #cfc5ee; border-radius: 12px; padding: 6px 10px; font-size: 13px; font-weight: 700; }
+body.bigtext { font-size: 118%; }
+body.bigtext .shop button span, body.bigtext .kcard span, body.bigtext .rec { font-size: 15px; }
+@media (max-width: 420px) { .steps { grid-template-columns: repeat(5, 1fr); } .steps span { font-size: 10px; } }
+@media (max-height: 420px) { #season { font-size: 11px; padding: 1px 8px 3px; margin: 0 0 2px; } #host { font-size: 12px; padding: 1px 10px; } }
+.kinds { flex-wrap: wrap; } @media (max-width: 480px) { .kinds button { padding: 4px 10px; font-size: 14px; } }

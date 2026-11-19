@@ -67,6 +67,8 @@ export class Actor {
   private bodyPitch = 0;
   private pvx = 0; private pvz = 0;
   private cheerT = 0;
+  /** Extra turn, flip and lift of a celebration (applied one frame late; it is smooth enough). */
+  private yawNow = 0; private pitchNow = 0; private liftNow = 0;
 
   constructor(public type: string, public isPlayer: boolean, tint?: THREE.ColorRepresentation, tint2?: THREE.ColorRepresentation) {
     this.rig = charRig(type, tint, tint2);
@@ -100,6 +102,28 @@ export class Actor {
   }
 
   cheer(): void { this.cheerT = 0.001; }
+
+  private emoteId: string | null = null;
+  private emoteT = 0;
+  /** Play a celebration (see EMOTES in profile.ts) in a loop; null stops it. */
+  emote(id: string | null): void {
+    if (id === this.emoteId) return;
+    this.emoteId = id; this.emoteT = 0;
+    if (!id) this.cheerT = 0;
+  }
+
+  /** Make this runner a see-through ghost (a replay of the player's best run). */
+  ghostify(color = '#9fe3ff'): void {
+    const gm = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.38, depthWrite: false });
+    this.root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const mt = m.material as THREE.Material;
+      if (mt.side === THREE.BackSide) m.visible = false;      // the toon outline shell
+      else m.material = gm;
+    });
+    this.shadow.visible = false;
+  }
 
   private hatSpin: THREE.Object3D | null = null;
   /** Put a hat on the head (see wear.ts). */
@@ -261,13 +285,51 @@ export class Actor {
     const lying = Math.abs(Math.sin(this.bodyPitch));
     this.root.position.set(this.x, this.y, this.z);
     this.root.rotation.y = this.yaw;
-    this.pivot.position.y = COM - lying * (COM - 0.3) * (this.grounded ? 1 : 0.3);
-    this.pivot.rotation.set(this.bodyPitch + pitch, 0, roll);
+    this.pivot.position.y = COM - lying * (COM - 0.3) * (this.grounded ? 1 : 0.3) + this.liftNow;
+    this.pivot.rotation.set(this.bodyPitch + pitch + this.pitchNow, this.yawNow, roll);
     this.pivot.scale.set(1 / Math.sqrt(sq), sq, 1 / Math.sqrt(sq));
 
     // limbs
-    let legL = 0, legR = 0, armLx = 0, armRx = 0, armOut = 0.12, bob = 0, headTilt = 0;
-    if (this.cheerT > 0) {
+    let legL = 0, legR = 0, armLx = 0, armRx = 0, armOut = 0.12, bob = 0, headTilt = 0, armOutR = -1;
+    let eYaw = 0, ePitch = 0, eLift = 0;
+    if (this.emoteId && this.mode === 'normal') {
+      this.emoteT += dt;
+      const t = this.emoteT % 2.4, w = this.emoteT * 9;
+      switch (this.emoteId) {
+        case 'wave':
+          armOut = 0.2; armOutR = 2.55 + Math.sin(this.emoteT * 13) * 0.4; headTilt = Math.sin(this.emoteT * 3) * 0.15;
+          bob = Math.abs(Math.sin(this.emoteT * 3)) * 0.05;
+          break;
+        case 'dance':
+          legL = Math.sin(w) * 0.5; legR = -Math.sin(w) * 0.5; armLx = Math.sin(w) * 1.6; armRx = -Math.sin(w) * 1.6; armOut = 1.1;
+          eYaw = Math.sin(this.emoteT * 4.5) * 0.6; bob = Math.abs(Math.sin(w)) * 0.18; headTilt = Math.sin(w) * 0.15;
+          break;
+        case 'spin': {
+          const u = Math.min(1, t / 1.0), e = 1 - (1 - u) * (1 - u);
+          eYaw = e * Math.PI * 4; armOut = u < 1 ? 1.5 : 2.6; bob = u < 1 ? 0.05 : Math.abs(Math.sin(w)) * 0.15;
+          break;
+        }
+        case 'flip': {
+          const u = Math.min(1, t / 0.85), e = u * u * (3 - 2 * u);
+          ePitch = e * Math.PI * 2; eLift = Math.sin(u * Math.PI) * 1.3; armOut = 2.6;
+          if (u > 0.15 && u < 0.85) { legL = legR = 1.3; armLx = armRx = 1.2; armOut = 0.6; }
+          break;
+        }
+        case 'bow': {
+          const u = Math.min(1, t / 0.5), back = t > 1.5 ? Math.min(1, (t - 1.5) / 0.5) : 0;
+          ePitch = -0.85 * Math.sin(u * Math.PI / 2) * (1 - back); armRx = 1.4 * (1 - back); armOut = 0.15; armOutR = 0.15;
+          break;
+        }
+        case 'robot': {
+          const q = (v: number, k: number) => Math.round(v * k) / k;
+          armLx = armRx = 1.57; armOut = 0.1; legL = Math.sign(Math.sin(this.emoteT * 5)) * 0.35; legR = -legL;
+          eYaw = q(Math.sin(this.emoteT * 1.6), 2) * 0.7; headTilt = q(Math.sin(this.emoteT * 3.2), 1) * 0.25;
+          armLx += q(Math.sin(this.emoteT * 5), 1) * 0.5; armRx -= q(Math.sin(this.emoteT * 5), 1) * 0.5;
+          break;
+        }
+        default: armOut = 2.5 + Math.sin(w) * 0.3; bob = Math.abs(Math.sin(w * 0.5)) * 0.22;
+      }
+    } else if (this.cheerT > 0) {
       this.cheerT += dt;
       const t = this.cheerT * 9;
       armOut = 2.5 + Math.sin(t) * 0.3;
@@ -295,13 +357,15 @@ export class Actor {
       bob = Math.abs(Math.cos(this.phase)) * 0.07 * k + (k < 0.1 ? Math.sin(performance.now() * 0.004 + this.phase) * 0.012 : 0);
       headTilt = s * 0.07 * k;
     }
+    this.yawNow = eYaw; this.pitchNow = ePitch; this.liftNow = eLift;
+    if (armOutR < 0) armOutR = armOut;
     const e = Math.min(1, 22 * dt), R = this.rig.rest;
     P.LegL.rotation.x += (legL - P.LegL.rotation.x) * e;
     P.LegR.rotation.x += (legR - P.LegR.rotation.x) * e;
     P.ArmL.rotation.x += (armLx - P.ArmL.rotation.x) * e;
     P.ArmR.rotation.x += (armRx - P.ArmR.rotation.x) * e;
     P.ArmL.rotation.z += (-armOut - P.ArmL.rotation.z) * e;
-    P.ArmR.rotation.z += (armOut - P.ArmR.rotation.z) * e;
+    P.ArmR.rotation.z += (armOutR - P.ArmR.rotation.z) * e;
     P.Body.position.y = R.Body.y + bob;
     P.Head.rotation.z = headTilt - roll * 0.6;
     P.Head.rotation.x = -pitch * 0.5;

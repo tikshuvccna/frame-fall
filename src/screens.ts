@@ -2,10 +2,10 @@
  * The backstage screens opened from the board: locker, prizes, album, records, settings and credits.
  * They share one panel (#panel) with a row of tabs on top.
  */
-import { CARDS, has, ITEMS_SHOP, PRIZES, type Item, type Kind, type Save } from './profile';
+import { CARDS, has, ITEMS_SHOP, PRIZES, SEASON, SEASON_STEP, xp, type Item, type Kind, type Save } from './profile';
 import { sfx } from './sfx';
 
-export type ScreenId = 'locker' | 'prizes' | 'album' | 'records' | 'settings' | 'credits';
+export type ScreenId = 'locker' | 'season' | 'prizes' | 'album' | 'records' | 'settings' | 'credits';
 export interface ScreenCtx {
   save: Save;
   store(): void;
@@ -17,7 +17,7 @@ export interface ScreenCtx {
   onReset(): void;
   onClose(): void;
 }
-const TABS: [ScreenId, string][] = [['locker', 'ארונית'], ['prizes', 'פרסים'], ['album', 'אלבום'], ['records', 'שיאים'], ['settings', 'הגדרות'], ['credits', 'קרדיטים']];
+const TABS: [ScreenId, string][] = [['locker', 'ארונית'], ['season', 'עונה'], ['prizes', 'פרסים'], ['album', 'אלבום'], ['records', 'שיאים'], ['settings', 'הגדרות'], ['credits', 'קרדיטים']];
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
@@ -47,7 +47,7 @@ export function openScreen(id: ScreenId, ctx: ScreenCtx): void {
   head.append(tabs, x);
   const body = el('div', 'pbody');
   root.append(head, body);
-  ({ locker, prizes, album, records, settings, credits })[id](body, ctx);
+  ({ locker, season, prizes, album, records, settings, credits })[id](body, ctx);
   coinify(body);
 }
 /** Windows 10 has no coin emoji: draw the coin in CSS instead. */
@@ -71,7 +71,7 @@ function locker(body: HTMLElement, ctx: ScreenCtx): void {
   const s = ctx.save;
   body.append(coinsLine(s));
   const kinds = el('div', 'kinds');
-  for (const [k, name] of [['char', 'דמויות'], ['hat', 'כובעים'], ['paint', 'צבעים']] as [Kind, string][]) {
+  for (const [k, name] of [['char', 'דמויות'], ['hat', 'כובעים'], ['paint', 'צבעים'], ['emote', 'חגיגות']] as [Kind, string][]) {
     const b = el('button', k === lockerKind ? 'on' : '', name);
     b.type = 'button';
     b.onclick = () => { lockerKind = k; sfx.click(); locker((body.textContent = '', body), ctx); coinify(body); };
@@ -80,12 +80,12 @@ function locker(body: HTMLElement, ctx: ScreenCtx): void {
   body.append(kinds);
   const grid = el('div', 'shop');
   const list: Item[] = ITEMS_SHOP.filter((i) => i.kind === lockerKind);
-  if (lockerKind !== 'char') list.unshift({ id: 'none', kind: lockerKind, name: lockerKind === 'hat' ? 'בלי כובע' : 'צבע רגיל' });
+  if (lockerKind !== 'char') list.unshift({ id: 'none', kind: lockerKind, name: lockerKind === 'hat' ? 'בלי כובע' : lockerKind === 'emote' ? 'שמחה רגילה' : 'צבע רגיל' });
   for (const it of list) {
     const b = el('button');
     b.type = 'button';
     const own = it.id === 'none' || has(s, it);
-    const worn = lockerKind === 'char' ? s.char === it.id : lockerKind === 'hat' ? (s.hat ?? 'none') === it.id : (s.paint ?? 'none') === it.id;
+    const worn = lockerKind === 'char' ? s.char === it.id : lockerKind === 'hat' ? (s.hat ?? 'none') === it.id : lockerKind === 'emote' ? (s.emote ?? 'none') === it.id : (s.paint ?? 'none') === it.id;
     if (it.paint) { const sw = el('i', 'sw'); sw.style.background = 'linear-gradient(135deg,' + it.paint[0] + ' 55%,' + it.paint[1] + ' 55%)'; b.append(sw); }
     b.append(el('b', '', it.name));
     const prize = it.prize ? PRIZES.find((p) => p.id === it.prize) : undefined;
@@ -100,6 +100,7 @@ function locker(body: HTMLElement, ctx: ScreenCtx): void {
       } else sfx.click();
       if (lockerKind === 'char') s.char = it.id;
       else if (lockerKind === 'hat') s.hat = it.id === 'none' ? null : it.id;
+      else if (lockerKind === 'emote') s.emote = it.id === 'none' ? null : it.id;
       else s.paint = it.id === 'none' ? null : it.id;
       ctx.store(); ctx.onLook();
       body.textContent = ''; locker(body, ctx); coinify(body);
@@ -107,7 +108,33 @@ function locker(body: HTMLElement, ctx: ScreenCtx): void {
     grid.append(b);
   }
   body.append(grid);
-  body.append(el('p', 'note', 'מטבעות אוספים בסיבובים. פרסים מקבלים על הישגים בלבד.'));
+  body.append(el('p', 'note', lockerKind === 'emote' ? 'החגיגה מופיעה כשעוברים סיבוב.' : 'מטבעות אוספים בסיבובים. פרסים מקבלים על הישגים בלבד.'));
+}
+
+// ------------------------------------------------------------------ season track
+function season(body: HTMLElement, ctx: ScreenCtx): void {
+  const s = ctx.save, x = xp(s), lvl = Math.min(SEASON.length, Math.floor(x / SEASON_STEP));
+  body.append(el('p', 'purse', 'שלב ' + lvl + ' מתוך ' + SEASON.length + ' · ' + x + ' נקודות'));
+  const bar = el('div', 'sbar'), fill = el('i');
+  fill.style.width = (lvl >= SEASON.length ? 100 : Math.round((x % SEASON_STEP) / SEASON_STEP * 100)) + '%';
+  bar.append(fill);
+  body.append(bar);
+  if (lvl < SEASON.length) body.append(el('p', 'note', 'עוד ' + ((lvl + 1) * SEASON_STEP - x) + ' נקודות לשלב הבא'));
+  const ul = el('div', 'steps');
+  for (const st of SEASON) {
+    const got = x >= st.n * SEASON_STEP;
+    const d = el('div', got ? 'got' : '');
+    const pr = st.prize ? PRIZES.find((p) => p.id === st.prize) : undefined;
+    d.append(el('b', '', String(st.n)), el('span', '', pr ? pr.name : '🪙 ' + st.coins), el('i', '', got ? '✓' : '🔒'));
+    ul.append(d);
+  }
+  body.append(ul);
+  const how = el('div', 'how');
+  how.append(el('b', '', 'איך מקבלים נקודות?'));
+  for (const t of ['כוכב בסיבוב: 10', 'בוחן שעבר: 10', 'מדליה במשחק התשובות: 15 לכל דרגה', 'קלף ידע: 15', 'מופע יומי שלם: 20', 'האימון: 10'])
+    how.append(el('span', '', t));
+  body.append(how);
+  body.append(el('p', 'note', 'אין כאן קניות ואין הגרלות: כל שלב מגיע מלמידה ומשחק.'));
 }
 function flash(b: HTMLElement): void { b.classList.remove('no'); void b.offsetWidth; b.classList.add('no'); }
 
@@ -168,6 +195,8 @@ function records(body: HTMLElement, ctx: ScreenCtx): void {
     t.append(tr);
   }
   body.append(t);
+  const dl = s.daily;
+  body.append(el('p', 'note', '📅 מופעים יומיים שהושלמו: ' + dl.done + (dl.streak > 1 ? ' · רצף: ' + dl.streak + ' ימים' : '')));
   body.append(el('p', 'note', 'שיאים אישיים במכשיר הזה. ✓ = מרוץ בלי אף נפילה. נסו לשבור את השיא של עצמכם!'));
 }
 
@@ -190,6 +219,15 @@ function settings(body: HTMLElement, ctx: ScreenCtx): void {
   cb.onchange = () => { s.low = cb.checked; ctx.store(); ctx.onSettings(); };
   low.append(el('span', '', 'גרפיקה חסכונית (למחשב איטי)'), cb);
   body.append(low);
+  const check = (label: string, get: () => boolean, set: (v: boolean) => void) => {
+    const row = el('label', 'set'), c = el('input');
+    c.type = 'checkbox'; c.checked = get();
+    c.onchange = () => { set(c.checked); ctx.store(); ctx.onSettings(); };
+    row.append(el('span', '', label), c);
+    body.append(row);
+  };
+  check('פחות תנועה (בלי רעידות והילוך איטי)', () => s.calm, (v) => { s.calm = v; });
+  check('טקסט גדול', () => s.big, (v) => { s.big = v; });
   const nm = el('label', 'set');
   const inp = el('input');
   inp.type = 'text'; inp.maxLength = 14; inp.value = s.name; inp.placeholder = 'כינוי';

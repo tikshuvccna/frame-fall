@@ -11,6 +11,7 @@ import { textTexture } from './toon';
 import { Tile } from './blocks';
 import { Pickups } from './collect';
 import { HATS } from './wear';
+import { Ghost, GHOST_HZ, type GhostRun } from './ghost';
 import { Box, World, type Advice, type Fx, type Ground, type Hazard, type Solid } from './world';
 
 export const RUNNERS = 20;
@@ -45,7 +46,29 @@ interface Bot { skill: number; pace: number; lane: number; jumpCool: number; pla
 export type Phase = 'ready' | 'count' | 'race' | 'done';
 export interface Result { place: number; qualified: boolean; falls: number; time: number; stars: number; coins: number; card: boolean }
 /** How the player looks, and whether the round hides a knowledge card. */
-export interface Look { hat?: string | null; paint?: [string, string] | null; card?: boolean }
+export interface Look {
+  hat?: string | null; paint?: [string, string] | null; card?: boolean;
+  /** The player's celebration at the finish. */
+  emote?: string | null;
+  /** The best run so far in this round, played back as a ghost (race rounds). */
+  ghost?: GhostRun | null;
+  /** Less motion: no camera shake and no slow motion. */
+  calm?: boolean;
+}
+
+/** What the show host says (short lines, picked at random so they do not repeat too much). */
+const HOST: Record<string, string[]> = {
+  go: ['ויוצאים לדרך!', 'המופע מתחיל!', 'בהצלחה לכולם!'],
+  first: ['יש לנו ראשון בקו הסיום!', 'מישהו כבר בסיום!'],
+  left5: ['נשארו רק 5 מקומות!', 'רק 5 מקומות אחרונים!'],
+  lead: ['אתם במקום הראשון!', 'מובילים! לא לעצור!'],
+  fall: ['אאוץ׳! קמים וממשיכים', 'לא נורא, עוד ניסיון', 'הופ! חוזרים למסלול'],
+  card: ['קלף ידע! איזו עין חדה!', 'מצאתם את הקלף הנסתר!'],
+  few: ['נשארו מעט שחקנים על הבמה!', 'המתח עולה!'],
+  ten: ['עוד 10 שניות!', 'עשר שניות אחרונות!'],
+  top3: ['אתם בין שלושת האספנים הגדולים!', 'איזה איסוף!'],
+  half: ['חצי מהדרך!', 'כבר באמצע המסלול!'],
+};
 
 const CANDS = [0, 0.3, -0.3, 0.65, -0.65, 1.05, -1.05, 1.5, -1.5];
 const CANDS_S = [...CANDS, 2.2, -2.2, 3.14];
@@ -74,6 +97,17 @@ export class Round {
   onCount?: (n: number) => void;
   onToast?: (text: string, good: boolean) => void;
   onDone?: (r: Result) => void;
+  /** A line from the show host. */
+  onHost?: (text: string) => void;
+  /** The player's path in this run (x, y, z ten times a second), for the ghost. */
+  readonly trail: number[] = [];
+  private trailT = 0;
+  private ghost: Ghost | null = null;
+  private hostT = -9;
+  private said = new Set<string>();
+  /** Slow motion at the finish: seconds of round time left in slow motion. */
+  private slowT = 0;
+  private slowAll = 0;
 
   // set by the level while it builds
   killY = -16;
@@ -105,7 +139,7 @@ export class Round {
   private adv: Advice = { sx: 0, speed: 1, jump: false, tx: null };
   private marker = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.42, 4).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
   private fx: Fx = {
-    shake: (a) => { this.shakeAmt = Math.max(this.shakeAmt, a); },
+    shake: (a) => { if (!this.look.calm) this.shakeAmt = Math.max(this.shakeAmt, a); },
     sound: (n) => { if (n === 'boing') sfx.boing(); else sfx.whack(); },
   };
 
@@ -124,8 +158,25 @@ export class Round {
     ml.scale.setScalar(1.25);
     this.marker.add(ml);
     this.scene.add(this.marker);
+    if (look.ghost && this.mode === 'race' && !auto) this.ghost = new Ghost(this.scene, look.ghost);
     this.world.update(0, 0);
     this.updateCamera(1, true);
+  }
+
+  /** How fast the round runs (slow motion at the finish). */
+  get timeScale(): number { return this.slowT > 0 ? 0.3 : 1; }
+
+  /** The host says a line of a kind (each kind once per round unless `again`), at most one line every 2.5 s. */
+  say(kind: string, again = false): void {
+    if (!this.onHost || (!again && this.said.has(kind)) || this.time - this.hostT < 2.5) return;
+    const l = HOST[kind];
+    if (!l) return;
+    this.said.add(kind); this.hostT = this.time;
+    this.onHost(l[Math.floor(Math.random() * l.length)]);
+  }
+  /** The player's celebration, or the usual cheer. */
+  private celebrate(a: Actor): void {
+    if (a.isPlayer && this.look.emote) a.emote(this.look.emote); else a.cheer();
   }
 
   // ------------------------------------------------------------------ helpers for level builders
@@ -251,7 +302,7 @@ export class Round {
       this.countT += dt;
       const n = 3 - Math.floor(this.countT / 0.8);
       if (n !== this.lastCount) { this.lastCount = n; this.onCount?.(Math.max(0, n)); if (n > 0) sfx.count(); else sfx.go(); }
-      if (n <= 0) this.phase = 'race';
+      if (n <= 0) { this.phase = 'race'; this.say('go'); }
     }
     const racing = this.phase === 'race' || this.phase === 'done';
     if (this.phase === 'race') {
@@ -260,6 +311,13 @@ export class Round {
       if (this.floodSpeed > 0 && this.raceT > this.floodDelay) this.floodY += this.floodSpeed * dt;
     }
     if (this.floodMesh) this.floodMesh.position.y = this.floodY + Math.sin(this.time * 2) * 0.05;
+    if (this.phase === 'race' && this.mode === 'race' && !this.player.finished) {
+      this.trailT -= dt;
+      if (this.trailT <= 0) { this.trailT += 1 / GHOST_HZ; const p = this.player; this.trail.push(+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2)); }
+    }
+    if (this.ghost && racing) this.ghost.place(this.raceT, dt);
+    if (this.slowT > 0) this.slowT -= dt;
+    if (this.phase === 'race' && this.doneT < 0) this.hostWatch();
     this.world.update(this.time, dt);
     for (const a of this.actors) {
       if (a.eliminated) continue;
@@ -276,7 +334,7 @@ export class Round {
     this.collidePairs();
     this.pickups.update(this.raceT, dt, this.phase === 'race' && this.doneT < 0, this.player, {
       coin: () => sfx.coin(),
-      card: (x, y, z) => { sfx.card(); this.burst(x, y, z); this.onToast?.('מצאת קלף ידע!', true); },
+      card: (x, y, z) => { sfx.card(); this.burst(x, y, z); this.onToast?.('מצאת קלף ידע!', true); this.hostT = -9; this.say('card'); },
     }, this.actors);
     for (const a of this.actors) { if (a.eliminated) continue; this.ground(a, false); a.animate(dt); }
     this.stepConfetti(dt);
@@ -293,20 +351,35 @@ export class Round {
     }
   }
 
+  /** Watch the round for moments the host comments on. */
+  private hostWatch(): void {
+    const p = this.player, left = this.limit - this.raceT;
+    if (this.count === 1) return;
+    if (left < 10.5 && left > 9 && this.mode !== 'race') this.say('ten');
+    if (this.mode === 'race') {
+      if (this.finishedCount >= 1) this.say('first');
+      if (this.qualify - this.finishedCount === 5 && !p.finished) this.say('left5');
+      if (this.raceT > 8 && this.rank() === 1) this.say('lead');
+      if (this.progress() > 0.5) this.say('half');
+    } else if (this.mode === 'survive') {
+      if (this.alive <= this.qualify + 3) this.say('few');
+    } else if (this.raceT > 20 && this.rank() <= 3) this.say('top3');
+  }
+
   private checkEnd(): void {
     const p = this.player;
     if (this.mode === 'survive') {
       if (p.eliminated) return;      // handled in fell()
       if (this.alive <= this.qualify || this.raceT >= this.limit) {
         this.won = true; this.doneT = 0;
-        sfx.win(); p.cheer();
+        sfx.win(); this.celebrate(p);
         this.burst(p.x, p.y + 2, p.z); this.burst(p.x - 3, p.y + 3, p.z - 2); this.burst(p.x + 3, p.y + 3, p.z - 2);
         for (const a of this.actors) if (!a.eliminated) a.finished = true;
       }
     } else if (this.mode === 'collect') {
       if (this.raceT >= this.limit) {
         this.won = this.rank() <= this.qualify; this.doneT = 0;
-        if (this.won) { sfx.win(); p.cheer(); this.burst(p.x, p.y + 2, p.z); } else sfx.lose();
+        if (this.won) { sfx.win(); this.celebrate(p); this.burst(p.x, p.y + 2, p.z); } else sfx.lose();
         for (const a of this.actors) a.finished = true;
       }
     } else if (this.raceT >= this.limit && !p.finished) { sfx.lose(); this.doneT = 0.6; }
@@ -344,7 +417,7 @@ export class Round {
     a.vx = a.vz = 0; a.vy = 0;
     a.mode = 'normal'; a.stun = 0.2; a.grounded = false;
     const lost = this.mode === 'collect' ? this.pickups.drop(a, 3) : 0;
-    if (a.isPlayer) { this.falls++; sfx.fall(); this.onToast?.(lost ? 'נפלת! איבדת ' + lost + ' מטבעות' : 'נפלת! חוזרים לנקודה האחרונה', false); }
+    if (a.isPlayer) { this.falls++; sfx.fall(); this.onToast?.(lost ? 'נפלת! איבדת ' + lost + ' מטבעות' : 'נפלת! חוזרים לנקודה האחרונה', false); if (Math.random() < 0.5) this.say('fall', true); }
   }
 
   private eliminate(a: Actor): void {
@@ -474,6 +547,7 @@ export class Round {
       this.won = a.place <= this.qualify;
       if (this.won) sfx.win(); else sfx.lose();
       this.doneT = 0;
+      if (!this.look.calm && !this.auto) { this.slowT = 0.42; this.slowAll = 0.42; }
     } else if (this.finishedCount >= this.qualify && !this.player.finished && this.doneT < 0) {
       sfx.lose();
       this.doneT = 0.6;
@@ -483,11 +557,11 @@ export class Round {
   private afterFinish(a: Actor): void {
     const c = a.ctl;
     c.ix = c.iz = 0; c.jump = c.dive = false;
-    if (this.mode !== 'race') { a.cheer(); return; }
+    if (this.mode !== 'race') { this.celebrate(a); return; }
     const tz = this.finishZ - 3.5 - (a.place % 4) * 1.6, txx = -6 + ((a.place * 5) % 9) * 1.5;
     const dx = txx - a.x, dz = tz - a.z, d = Math.hypot(dx, dz);
     if (d > 0.6 && a.mode === 'normal' && a.grounded) { a.vx = dx / d * 4; a.vz = dz / d * 4; }
-    else if (d <= 0.6) { a.vx *= 0.8; a.vz *= 0.8; if (a.place <= this.qualify) a.cheer(); }
+    else if (d <= 0.6) { a.vx *= 0.8; a.vz *= 0.8; if (a.place <= this.qualify) this.celebrate(a); }
   }
 
   private end(): void {
@@ -559,11 +633,16 @@ export class Round {
     const back = (portrait ? 13 : 10) * this.camBack, up = (portrait ? 7.5 : 5.6) * this.camUp;
     const py = Math.max(p.y, Math.max(this.killY + 10, this.floodY));
     const want = new THREE.Vector3(p.x * 0.72, py + up, p.z + back);
+    if (this.slowT > 0) {                                    // slow motion: swing round to the side of the runner
+      const u = 1 - this.slowT / this.slowAll, ang = u * 0.9;
+      want.set(p.x + Math.sin(ang) * back * 0.8, py + up * 0.7, p.z + Math.cos(ang) * back * 0.8);
+    }
     if (snap) this.camPos.copy(want);
     else if (!p.eliminated) { this.camPos.x += (want.x - this.camPos.x) * Math.min(1, 6 * dt); this.camPos.z += (want.z - this.camPos.z) * Math.min(1, 6 * dt); this.camPos.y += (want.y - this.camPos.y) * Math.min(1, 3 * dt); }
     this.shakeAmt = Math.max(0, this.shakeAmt - dt * 1.4);
     const s = this.shakeAmt * 0.5;
     cam.position.set(this.camPos.x + (Math.random() - 0.5) * s, this.camPos.y + (Math.random() - 0.5) * s, this.camPos.z);
-    cam.lookAt(this.camPos.x * 0.92, this.camPos.y - up + 1.6, this.camPos.z - back - this.camAhead);
+    if (this.slowT > 0) cam.lookAt(p.x, py + 1, p.z);
+    else cam.lookAt(this.camPos.x * 0.92, this.camPos.y - up + 1.6, this.camPos.z - back - this.camAhead);
   }
 }

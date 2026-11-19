@@ -5,10 +5,12 @@ import { initInput, readInput } from './input';
 import { LESSONS, type GameLevel, type Lesson } from './learn/content';
 import { GAME_LEVELS, quizRun } from './learn/quizrun';
 import { runLesson } from './learn/ui';
-import { LEVELS } from './levels';
+import { LEVELS, PRACTICE } from './levels';
+import { clearGhosts, loadGhost, saveGhost } from './ghost';
+import { rng } from './collect';
 import { CHAR_TYPES, loadModels } from './models';
 import { playMusic, resumeMusic } from './music';
-import { checkPrizes, ITEMS_SHOP, loadSave, PAINTS, payOnce, storeSave, type Prize } from './profile';
+import { checkPrizes, claimSeason, ITEMS_SHOP, loadSave, PAINTS, payOnce, SEASON, SEASON_STEP, storeSave, xp, type Prize } from './profile';
 import { Round, RUNNERS, type LevelDef, type Result } from './round';
 import { coinify, openScreen, type ScreenCtx, type ScreenId } from './screens';
 import { setVolumes, sfx, unlockAudio } from './sfx';
@@ -20,7 +22,7 @@ const charName = (t: string) => ITEMS_SHOP.find((i) => i.id === t)?.name ?? t;
 
 // ------------------------------------------------------------------ the show: rounds with a lesson every two or three rounds
 type Item = { kind: 'round'; lv: LevelDef; n: number } | { kind: 'lesson'; ls: Lesson };
-const ITEMS: Item[] = [];
+const ITEMS: Item[] = [{ kind: 'round', lv: PRACTICE, n: 0 }];      // the practice comes first and is never required
 const LESSON_BEFORE = [1, 3, 6, 8, 10];            // a lesson comes before these rounds (by index)
 LEVELS.forEach((lv, i) => {
   const k = LESSON_BEFORE.indexOf(i);
@@ -32,22 +34,40 @@ LEVELS.forEach((lv, i) => {
 const save = loadSave();
 function store(): void { storeSave(save); }
 function lessonState(id: string): { quiz: boolean; medal: number } { return (save.lessons[id] ??= { quiz: false, medal: 0 }); }
-function complete(it: Item): boolean { return it.kind === 'round' ? (save.stars[it.lv.id] ?? 0) > 0 : lessonState(it.ls.id).quiz && lessonState(it.ls.id).medal > 0; }
-function unlocked(i: number): boolean { return ALL || i === 0 || complete(ITEMS[i - 1]); }
-function look(card: boolean) {
-  return { hat: save.hat, paint: save.paint ? PAINTS[save.paint.replace('paint_', '')] ?? null : null, card };
+function complete(it: Item): boolean {
+  if (it.kind === 'round') return it.lv === PRACTICE ? save.paid.includes('practice.q') : (save.stars[it.lv.id] ?? 0) > 0;
+  return lessonState(it.ls.id).quiz && lessonState(it.ls.id).medal > 0;
 }
+function unlocked(i: number): boolean { return ALL || i <= 1 || complete(ITEMS[i - 1]); }
+function look(card: boolean, ghostOf?: string) {
+  return {
+    hat: save.hat, paint: save.paint ? PAINTS[save.paint.replace('paint_', '')] ?? null : null, card,
+    emote: save.emote, calm: save.calm, ghost: ghostOf ? loadGhost(ghostOf) : null,
+  };
+}
+const today = (d = new Date()) => d.toLocaleDateString('en-CA');
+const yesterday = () => today(new Date(Date.now() - 86400000));
 
 const renderer = new THREE.WebGLRenderer({ canvas: $('view') as HTMLCanvasElement, antialias: true, powerPreference: 'high-performance' });
 function applySettings(): void {
   renderer.setPixelRatio(save.low ? 1 : Math.min(window.devicePixelRatio, 2));
   setVolumes(save.music, save.sound);
+  document.body.classList.toggle('bigtext', save.big);
   resize();
 }
 let game: Round | null = null;
 let sel = 0;                                                   // selected ticket on the board
 let mini: { ls: Lesson; level: number } | null = null;         // the answer-door game being played, if any
 let shownRound = -1;
+/** The daily show being played: item indexes of its rounds, the one being played, stars won so far. */
+let daily: { list: number[]; i: number; stars: number } | null = null;
+let hostT = 0;
+function host(text: string): void {
+  const h = $('host');
+  h.textContent = '🎤 ' + text;
+  h.classList.add('on');
+  hostT = 2.6;
+}
 
 function resize(): void {
   const w = window.innerWidth, h = window.innerHeight;
@@ -78,10 +98,11 @@ function dispose(old: Round): void {
   (old.scene.background as THREE.Texture | null)?.dispose();
 }
 
-function newGame(def: LevelDef, card: boolean): void {
+function newGame(def: LevelDef, card: boolean, ghost = false): void {
   if (game) dispose(game);
-  game = new Round(def, save.char, params.has('auto'), look(card && !save.cards.includes(def.id)));
+  game = new Round(def, save.char, params.has('auto'), look(card && !save.cards.includes(def.id), ghost && def.mode === 'race' ? def.id : undefined));
   game.onToast = toast;
+  game.onHost = host;
   game.onCount = (n) => {
     const c = $('count');
     c.textContent = n > 0 ? String(n) : 'צאו!';
@@ -100,7 +121,7 @@ function showRoundOf(i: number, force = false): void {
   if (it.kind !== 'round') return;
   if (!force && shownRound === k && game && game.phase === 'ready' && !mini) return;
   shownRound = k; mini = null;
-  newGame(it.lv, true);
+  newGame(it.lv, it.lv !== PRACTICE, it.lv !== PRACTICE);
 }
 
 function stars(n: number): string { return '★'.repeat(n); }
@@ -114,7 +135,12 @@ function drawBoard(): void {
     b.type = 'button';
     const open = unlocked(i);
     const num = document.createElement('b'), name = document.createElement('span'), s = document.createElement('i');
-    if (it.kind === 'round') {
+    if (it.kind === 'round' && it.lv === PRACTICE) {
+      b.classList.add('practice');
+      num.textContent = '🎓';
+      name.textContent = 'אימון';
+      s.textContent = complete(it) ? 'הושלם' : '';
+    } else if (it.kind === 'round') {
       num.textContent = String(it.n);
       name.textContent = open ? it.lv.title : 'נעול';
       s.textContent = stars(save.stars[it.lv.id] ?? 0);
@@ -145,12 +171,43 @@ function drawBoard(): void {
   $('purse').textContent = '🪙 ' + save.coins;
   coinify($('purse'));
   $('who').textContent = (save.name ? save.name + ' · ' : '') + charName(save.char);
+  // the season track and the daily show
+  const x = xp(save), lvl = Math.min(SEASON.length, Math.floor(x / SEASON_STEP));
+  $('seasonTxt').textContent = 'מסלול העונה · שלב ' + lvl + ' מתוך ' + SEASON.length;
+  ($('seasonBar').firstElementChild as HTMLElement).style.width = (lvl >= SEASON.length ? 100 : Math.round((x % SEASON_STEP) / SEASON_STEP * 100)) + '%';
+  const dl = dailyList(), dd = $('daily');
+  dd.textContent = dl.length ? '📅 מופע יומי' + (save.daily.last === today() ? ' ✓' : '') : '📅 מופע יומי 🔒';
+  dd.classList.toggle('lock', !dl.length);
+}
+
+// ------------------------------------------------------------------ the daily show: the same four rounds for everyone on a day
+function dailyList(): number[] {
+  const r = rng('daily.' + today());
+  const all = ITEMS.map((it, i) => (it.kind === 'round' && it.lv !== PRACTICE ? i : -1)).filter((i) => i >= 0);
+  for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
+  const open = all.filter((i) => unlocked(i));
+  return open.length >= 4 ? open.slice(0, 4) : [];
+}
+function startDaily(): void {
+  const list = dailyList();
+  if (!list.length) { sfx.nope(); $('tip').textContent = 'המופע היומי נפתח אחרי שפותחים 4 סיבובים. בכל יום: 4 סיבובים, מטבעות כפולים ובונוס.'; return; }
+  daily = { list, i: 0, stars: 0 };
+  playDaily();
+}
+function playDaily(): void {
+  if (!daily) return;
+  sel = daily.list[daily.i];
+  shownRound = -1;
+  showRoundOf(sel, true);
+  begin();
+  toast('מופע יומי: סיבוב ' + (daily.i + 1) + ' מתוך ' + daily.list.length, true);
 }
 
 function showBoard(): void {
   document.body.classList.remove('playing');
   for (const id of ['hud', 'end', 'mini', 'lesson', 'panel', 'prize']) $(id).classList.add('hide');
   document.body.classList.remove('preview');
+  daily = null;
   $('card').classList.remove('hide');
   showRoundOf(sel);
   drawBoard();
@@ -192,6 +249,7 @@ function buildPreview(): void {
   const L = look(false);
   const a = new Actor(save.char, true, L.paint?.[0], L.paint?.[1]);
   a.wear(L.hat, '#ff6b6b');
+  a.emote(save.emote);
   a.yaw = 0;                                                   // face the camera
   a.animate(0.016);
   pv.scene.add(a.root);
@@ -204,7 +262,7 @@ const screenCtx: ScreenCtx = {
   lessons: LESSONS.map((l) => ({ id: l.id, short: l.short })),
   onLook: () => { buildPreview(); shownRound = -1; },
   onSettings: applySettings,
-  onReset: () => { try { localStorage.removeItem('crownrun.save.v1'); } catch { /* no storage */ } location.reload(); },
+  onReset: () => { try { localStorage.removeItem('crownrun.save.v1'); } catch { /* no storage */ } clearGhosts(); location.reload(); },
   onClose: () => { showRoundOf(sel, shownRound === -1); drawBoard(); $('card').classList.remove('hide'); },
 };
 function openPanel(id: ScreenId): void {
@@ -280,7 +338,8 @@ function begin(): void {
   $('hud').classList.remove('hide');
   document.body.classList.add('playing');
   const d = game?.def;
-  playMusic(mini ? 'race' : d?.id === 'crown' ? 'final' : d?.mode !== 'race' ? 'survive' : 'race');
+  playMusic(mini ? 'race' : d?.id === 'crown' || d?.id === 'storm' ? 'final' : d?.mode !== 'race' ? 'survive' : 'race');
+  $('host').classList.remove('on');
   game?.start();
 }
 
@@ -310,6 +369,7 @@ function showEnd(r: Result): void {
     const it = ITEMS[sel];
     if (it.kind !== 'round') return;
     const lv = it.lv;
+    if (lv === PRACTICE) { endPractice(r, parts); return; }
     if (r.stars > (save.stars[lv.id] ?? 0)) save.stars[lv.id] = r.stars;
     const rec = (save.records[lv.id] ??= { plays: 0, bestPlace: 99, bestTime: 1e9, noFall: false, coins: 0 });
     const newBest = r.qualified && lv.mode === 'race' && r.time < rec.bestTime && rec.plays > 0;
@@ -325,8 +385,12 @@ function showEnd(r: Result): void {
       parts.push('🪙 ' + b + ' על העלייה');
     }
     if (newBest) parts.push('שיא אישי חדש!');
+    if (r.qualified && lv.mode === 'race' && game && game.trail.length) {      // keep the best run as a ghost
+      const old = loadGhost(lv.id);
+      if (!old || r.time < old.t) { saveGhost(lv.id, { t: r.time, char: save.char, hat: save.hat, p: game.trail }); if (!old) parts.push('בפעם הבאה תרוצו מול רוח השיא שלכם'); }
+    }
     const last = sel === ITEMS.length - 1;
-    $('endTitle').textContent = r.qualified ? (last ? 'הכתר שלך!' : 'עלית שלב!') : 'לא הפעם';
+    $('endTitle').textContent = r.qualified ? (lv.id === 'crown' ? 'הכתר שלך!' : lv.id === 'storm' ? 'כבשת את הפסגה!' : 'עלית שלב!') : 'לא הפעם';
     const what = lv.mode === 'survive' ? (r.qualified ? 'שרדת עד הסוף' : 'יצאת במקום ' + r.place + ' מתוך ' + RUNNERS) : lv.mode === 'collect' ? 'מקום ' + r.place + ' מתוך ' + RUNNERS + ' · ' + r.coins + ' מטבעות' : 'מקום ' + r.place + ' מתוך ' + RUNNERS;
     $('endLine').textContent = what + ' · ' + r.time.toFixed(1) + ' שניות' + (lv.mode === 'race' ? ' · ' + (r.falls === 0 ? 'בלי אף נפילה' : r.falls + ' נפילות') : '');
     const can = !last && unlocked(sel + 1);
@@ -342,13 +406,65 @@ function showEnd(r: Result): void {
     $('again').onclick = () => { shownRound = -1; showRoundOf(sel); begin(); };
     $('menu').textContent = 'כל המופע';
     $('menu').onclick = () => { shownRound = -1; showBoard(); };
+    if (daily) endDaily(r, parts);
   }
+  finishEnd(r, parts);
+}
+
+function endDaily(r: Result, parts: string[]): void {
+  const d = daily as NonNullable<typeof daily>, n = d.list.length, next = $('next');
+  save.coins += r.coins;                                       // coins count double in the daily show
+  if (r.coins) parts.push('מטבעות כפולים במופע היומי');
+  $('again').onclick = () => playDaily();
+  $('menu').textContent = 'יציאה מהמופע';
+  $('menu').onclick = () => { shownRound = -1; showBoard(); };
+  if (!r.qualified) {
+    $('endTitle').textContent = 'עוד ניסיון?';
+    $('endLine').textContent += ' · מופע יומי ' + (d.i + 1) + ' מתוך ' + n;
+    next.classList.add('hide');
+    return;
+  }
+  d.stars += r.stars;
+  if (d.i + 1 < n) {
+    next.textContent = 'לסיבוב ' + (d.i + 2) + ' מתוך ' + n;
+    next.classList.remove('hide');
+    next.onclick = () => { d.i++; playDaily(); };
+    return;
+  }
+  const day = today(), dl = save.daily;
+  if (dl.last !== day) { dl.streak = dl.last === yesterday() ? dl.streak + 1 : 1; dl.done++; dl.last = day; }
+  dl.best = { [day]: Math.max(dl.best[day] ?? 0, d.stars) };
+  const b = payOnce(save, 'daily.' + day, 60);
+  if (b) parts.push('🪙 ' + b + ' על המופע היומי');
+  $('endTitle').textContent = 'סיימתם את המופע היומי!';
+  $('endLine').textContent = '★ ' + d.stars + ' כוכבים · רצף של ' + dl.streak + (dl.streak === 1 ? ' יום' : ' ימים') + ' · מחר יש מופע חדש';
+  next.classList.add('hide');
+  $('again').onclick = () => { daily = { list: d.list, i: 0, stars: 0 }; playDaily(); };
+}
+
+function endPractice(r: Result, parts: string[]): void {
+  const next = $('next');
+  if (r.qualified) { const b = payOnce(save, 'practice.q', 20); if (b) parts.push('🪙 ' + b + ' על האימון'); }
+  $('endTitle').textContent = r.qualified ? 'האימון הושלם!' : 'עוד אימון?';
+  $('endLine').textContent = r.qualified ? 'עכשיו אתם יודעים לרוץ, לקפוץ ולזנק' + (r.falls ? ' · ' + r.falls + ' נפילות' : ' · בלי אף נפילה!') : 'אפשר לנסות שוב, או לצאת למופע';
+  next.textContent = 'למופע!';
+  next.classList.remove('hide');
+  next.onclick = () => { sel = 1; showRoundOf(sel); begin(); };
+  $('again').onclick = () => { shownRound = -1; showRoundOf(sel, true); begin(); };
+  $('menu').textContent = 'כל המופע';
+  $('menu').onclick = () => { shownRound = -1; showBoard(); };
+  finishEnd(r, parts);
+}
+
+function finishEnd(r: Result, parts: string[]): void {
   save.coins += r.coins;
   $('endGain').textContent = parts.join(' · ');
   $('endGain').classList.toggle('hide', parts.length === 0);
   $('endPurse').textContent = '🪙 ' + save.coins;
-  coinify($('endPurse')); coinify($('endGain'));
   const won = checkPrizes(save);
+  const sc = claimSeason(save);
+  if (sc) { parts.push('🪙 ' + sc + ' ממסלול העונה'); $('endGain').textContent = parts.join(' · '); $('endGain').classList.remove('hide'); $('endPurse').textContent = '🪙 ' + save.coins; }
+  coinify($('endPurse')); coinify($('endGain'));
   store();
   $('end').classList.remove('hide');
   if (won.length) setTimeout(() => announce(won), 900);
@@ -373,10 +489,11 @@ function frame(now: number): void {
     readInput(game.player.ctl);
     if (game.player.ctl.dive && game.player.canDive && game.phase === 'race') sfx.dive();
     game.step(STEP);
-    acc -= STEP; n++;
+    acc -= STEP / game.timeScale; n++;
   }
   if (n === 5) acc = 0;
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').className = ''; }
+  if (hostT > 0) { hostT -= dt; if (hostT <= 0) $('host').classList.remove('on'); }
   const [c1, c2] = game.chips();
   $('rank').textContent = c1;
   $('qual').textContent = c2;
@@ -399,11 +516,13 @@ async function boot(): Promise<void> {
   checkPrizes(save);
   store();
   document.querySelectorAll<HTMLButtonElement>('#nav button').forEach((b) => { b.onclick = () => { sfx.click(); openPanel(b.dataset.s as ScreenId); }; });
-  const want = Number(params.get('lv'));
+  const want = params.has('lv') ? Number(params.get('lv')) : -1;
   const wi = ITEMS.findIndex((x) => x.kind === 'round' && x.n === want);
   if (wi >= 0 && unlocked(wi)) sel = wi;
   else { sel = ITEMS.findIndex((x, i) => unlocked(i) && !complete(x)); if (sel < 0) sel = 0; }
   showBoard();
+  $('daily').onclick = () => { sfx.click(); startDaily(); };
+  $('season').onclick = () => { sfx.click(); openPanel('season'); };
   $('go').onclick = () => {
     const x = ITEMS[sel];
     if (x.kind === 'round') { showRoundOf(sel); begin(); }
