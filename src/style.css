@@ -252,3 +252,13 @@ body.bigtext .shop button span, body.bigtext .kcard span, body.bigtext .rec { fo
 @media (max-width: 420px) { .steps { grid-template-columns: repeat(5, 1fr); } .steps span { font-size: 10px; } }
 @media (max-height: 420px) { #season { font-size: 11px; padding: 1px 8px 3px; margin: 0 0 2px; } #host { font-size: 12px; padding: 1px 10px; } }
 .kinds { flex-wrap: wrap; } @media (max-width: 480px) { .kinds button { padding: 4px 10px; font-size: 14px; } }
+
+/* in-game volume: a small speaker in the top corner (away from the stick and the buttons) opens two sliders */
+#volBtn, #volBox { position: fixed; z-index: 15; display: none; }
+body.playing #volBtn { display: block; }
+body.playing #volBox:not(.hide) { display: flex; }
+#volBtn { top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--ink); background: #fff; font-size: 20px; line-height: 1; box-shadow: 0 3px 0 var(--ink); cursor: pointer; padding: 0; touch-action: manipulation; }
+#volBox { top: calc(max(8px, env(safe-area-inset-top)) + 52px); left: max(8px, env(safe-area-inset-left)); flex-direction: column; gap: 6px; background: var(--paper); border: 4px solid var(--ink); border-radius: 16px; box-shadow: 0 5px 0 var(--ink); padding: 8px 12px; }
+#volBox label { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 14px; }
+#volBox span { min-width: 52px; }
+#volBox input { width: 130px; height: 28px; accent-color: var(--violet); touch-action: pan-x; }

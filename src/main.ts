@@ -340,6 +340,7 @@ function begin(): void {
   const d = game?.def;
   playMusic(mini ? 'race' : d?.id === 'crown' || d?.id === 'storm' ? 'final' : d?.mode !== 'race' ? 'survive' : 'race');
   $('host').classList.remove('on');
+  $('volBox').classList.add('hide');
   preload('victory');
   game?.start();
 }
@@ -523,6 +524,15 @@ async function boot(): Promise<void> {
   else { sel = ITEMS.findIndex((x, i) => unlocked(i) && !complete(x)); if (sel < 0) sel = 0; }
   showBoard();
   $('daily').onclick = () => { sfx.click(); startDaily(); };
+  // in-game volume (the speaker in the corner): the same two settings as the settings screen
+  const vm = $('volMusic') as HTMLInputElement, vs = $('volSound') as HTMLInputElement;
+  const syncVol = () => { vm.value = String(save.music); vs.value = String(save.sound); $('volBtn').textContent = save.music === 0 && save.sound === 0 ? '🔇' : '🔊'; };
+  $('volBtn').onclick = () => { sfx.click(); syncVol(); $('volBox').classList.toggle('hide'); };
+  vm.oninput = () => { save.music = Number(vm.value); store(); setVolumes(save.music, save.sound); syncVol(); };
+  vs.oninput = () => { save.sound = Number(vs.value); store(); setVolumes(save.music, save.sound); syncVol(); };
+  vs.onchange = () => { sfx.coin(); vm.blur(); vs.blur(); };
+  vm.onchange = () => { vm.blur(); vs.blur(); };
+  syncVol();
   $('season').onclick = () => { sfx.click(); openPanel('season'); };
   $('go').onclick = () => {
     const x = ITEMS[sel];
