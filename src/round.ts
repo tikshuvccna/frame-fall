@@ -8,11 +8,11 @@ import { Actor, RADIUS } from './actor';
 import { CHAR_TYPES, kit } from './models';
 import { sfx } from './sfx';
 import { textTexture } from './toon';
-import { Tile } from './blocks';
+import { DoorWall, Tile } from './blocks';
 import { Pickups } from './collect';
 import { HATS } from './wear';
 import { Ghost, GHOST_HZ, type GhostRun } from './ghost';
-import { Box, World, type Advice, type Fx, type Ground, type Hazard, type Solid } from './world';
+import { Box, Hammer, World, type Advice, type Fx, type Ground, type Hazard, type Solid } from './world';
 
 export const RUNNERS = 20;
 export const TINTS = ['#ff7ac8', '#ffb347', '#6fd3ff', '#8be37d', '#b79cff', '#ff6b6b', '#ffe45c', '#4fd1c5', '#f78fb3', '#9aa5ff', '#ffa94d', '#63e6be'];
@@ -128,6 +128,7 @@ export class Round {
   private bots = new Map<Actor, Bot>();
   private cp = new Map<Actor, number>();
   private floaters: { o: THREE.Object3D; y: number; ph: number }[] = [];
+  private occluders: { z: number; alpha: number; minAlpha: number; set: (a: number) => void }[] = [];
   private confetti!: THREE.InstancedMesh;
   private cf: { p: THREE.Vector3; v: THREE.Vector3; life: number; rot: number }[] = [];
   private shakeAmt = 0;
@@ -154,8 +155,11 @@ export class Round {
     if (this.floodSpeed > 0) this.buildFlood();
     this.spawnRunners(playerType);
     this.pickups = new Pickups(this.scene, this.world, this.mode, def.id, this.finishZ, !!look.card, this.area);
-    const ml = new THREE.Mesh(this.marker.geometry, new THREE.MeshBasicMaterial({ color: 0x2a2036, side: THREE.BackSide }));
+    const ml = new THREE.Mesh(this.marker.geometry, new THREE.MeshBasicMaterial({ color: 0x2a2036, side: THREE.BackSide, depthTest: false }));
     ml.scale.setScalar(1.25);
+    ml.renderOrder = 51;
+    (this.marker.material as THREE.MeshBasicMaterial).depthTest = false;
+    this.marker.renderOrder = 52;
     this.marker.add(ml);
     this.scene.add(this.marker);
     if (look.ghost && this.mode === 'race' && !auto) this.ghost = new Ghost(this.scene, look.ghost);
@@ -180,7 +184,38 @@ export class Round {
   }
 
   // ------------------------------------------------------------------ helpers for level builders
-  add<T extends Solid | Hazard>(o: T): T { return this.world.add(o); }
+  add<T extends Solid | Hazard>(o: T): T {
+    if (o instanceof DoorWall) this.occluders.push({ z: o.z, alpha: 1, minAlpha: 0.14, set: (a) => o.setFade(a) });
+    else if (o instanceof Hammer) this.occluders.push({ z: o.z, alpha: 1, minAlpha: 0.22, set: (a) => o.setFade(a) });
+    return this.world.add(o);
+  }
+  /** Register a static mesh (like start/finish gates) to fade when between camera and player. */
+  private fadeable(obj: THREE.Object3D, z: number, minAlpha = 0.16): void {
+    const mats: THREE.Material[] = [];
+    const outlines: THREE.Mesh[] = [];
+    obj.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const mt = m.material as THREE.Material;
+      if (mt.side === THREE.BackSide) { outlines.push(m); return; }
+      const c = mt.clone();
+      c.userData.round = true;
+      m.material = c;
+      mats.push(c);
+    });
+    this.occluders.push({
+      z, alpha: 1, minAlpha,
+      set: (a) => {
+        const trans = a < 0.99;
+        for (const mt of mats) {
+          if (mt.transparent !== trans) { mt.transparent = trans; mt.needsUpdate = true; }
+          mt.opacity = a;
+          mt.depthWrite = !trans;
+        }
+        for (const ol of outlines) ol.visible = a > 0.85;
+      },
+    });
+  }
   /** A box from zNear to zFar (zFar is further along the course, more negative). */
   floor(x: number, y: number, zNear: number, zFar: number, hx: number, o: ConstructorParameters<typeof Box>[5] = {}): Box {
     return this.world.add(new Box(x, y, (zNear + zFar) / 2, hx, (zNear - zFar) / 2, o));
@@ -197,10 +232,16 @@ export class Round {
   /** The usual start: a wide pad from z 10 to -14 with the start gate and flags. */
   startPad(pal: 'cream' | 'mint' | 'sky' | 'violet' | 'sun' = 'cream'): void {
     this.floor(0, 0, 10, -14, 8, { pal });
-    this.deco('gate_start', 0, 0, -6);
-    const banner = new THREE.Mesh(new THREE.PlaneGeometry(6.5, 1.2), new THREE.MeshBasicMaterial({ map: textTexture(this.title, { w: 1024, h: 192, bg: '#ffffff', fg: '#7b6cf6' }) }));
+    const gate = kit('gate_start');
+    gate.position.set(0, 0, -6);
+    this.scene.add(gate);
+    const bTex = textTexture(this.title, { w: 1024, h: 192, bg: '#ffffff', fg: '#7b6cf6' });
+    bTex.userData.round = true;
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(6.5, 1.2), new THREE.MeshBasicMaterial({ map: bTex }));
     banner.position.set(0, 7.2, -5.7);
     this.scene.add(banner);
+    this.fadeable(gate, -6);
+    this.fadeable(banner, -5.7);
     for (let k = 0; k < 5; k++) for (const sd of [-1, 1]) this.deco('flag', sd * 8.5, 0, 6 - k * 4.6, 1, TINTS[(k + (sd > 0 ? 3 : 0)) % TINTS.length], sd > 0 ? Math.PI : 0);
   }
   /** The finish: a pad of 16 m with the gate at z, flags and the trophy. */
@@ -209,6 +250,7 @@ export class Round {
     const fin = kit('gate_finish');
     fin.position.set(0, y, z);
     this.scene.add(fin);
+    this.fadeable(fin, z);
     this.deco('trophy', 0, y, z - 8, 2.2);
     for (let k = 0; k < 3; k++) for (const sd of [-1, 1]) this.deco('flag', sd * 7.6, y, z - 1 - k * 4, 1, TINTS[(k + (sd > 0 ? 5 : 1)) % TINTS.length], sd > 0 ? Math.PI : 0);
     this.finishZ = z; this.finishY = y;
@@ -283,6 +325,7 @@ export class Round {
       this.scene.add(a.root, a.shadow);
       if (isP) {
         this.player = a;
+        a.enableXray();
         a.onJump = sfx.jump;
         a.onLand = (v) => { if (v > 6) sfx.land(); };
       }
@@ -644,5 +687,17 @@ export class Round {
     cam.position.set(this.camPos.x + (Math.random() - 0.5) * s, this.camPos.y + (Math.random() - 0.5) * s, this.camPos.z);
     if (this.slowT > 0) cam.lookAt(p.x, py + 1, p.z);
     else cam.lookAt(this.camPos.x * 0.92, this.camPos.y - up + 1.6, this.camPos.z - back - this.camAhead);
+    this.updateOcclusion(snap ? 1 : dt);
+  }
+
+  private updateOcclusion(dt: number): void {
+    const pz = this.player.z, cz = this.camera.position.z;
+    for (const o of this.occluders) {
+      const blocking = pz < o.z - 0.15 && cz > o.z - 1.2;
+      const target = blocking ? o.minAlpha : 1;
+      o.alpha += (target - o.alpha) * Math.min(1, 14 * dt);
+      if (Math.abs(o.alpha - target) < 0.01) o.alpha = target;
+      o.set(o.alpha);
+    }
   }
 }

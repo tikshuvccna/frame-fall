@@ -282,9 +282,13 @@ export class Spinner extends Hazard {
 export class Hammer extends Hazard {
   hx = 0; hy = 0; hv = 0;
   private arm = new THREE.Group();
+  private frameMat: THREE.MeshToonMaterial;
+  private fadeAlpha = 1;
   constructor(public x: number, public y: number, public z: number, private len: number, private amp: number, private speed: number, private phase: number, color: string) {
     super();
     const post = toonMat(0x7b6cf6);
+    post.userData.round = true;
+    this.frameMat = post;
     const pivotY = len + 1.4;
     for (const s of [-1, 1]) {
       const p = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, pivotY + 0.4, 10), post);
@@ -308,6 +312,15 @@ export class Hammer extends Hazard {
     this.arm.position.y = pivotY;
     this.mesh.add(this.arm);
     this.mesh.position.set(x, y, z);
+  }
+  /** Fade the overhead frame when it sits between the camera and the player. */
+  setFade(alpha: number): void {
+    if (Math.abs(alpha - this.fadeAlpha) < 0.005) return;
+    this.fadeAlpha = alpha;
+    const trans = alpha < 0.99;
+    if (this.frameMat.transparent !== trans) { this.frameMat.transparent = trans; this.frameMat.needsUpdate = true; }
+    this.frameMat.opacity = alpha;
+    this.frameMat.depthWrite = !trans;
   }
   /** Sideways position of the head at time t. */
   headX(t: number): number { return this.x + this.len * Math.sin(this.amp * Math.sin(t * this.speed + this.phase)); }

@@ -95,6 +95,7 @@ function dispose(old: Round): void {
     for (const mt of Array.isArray(m.material) ? m.material : [m.material]) {
       const map = (mt as THREE.MeshToonMaterial).map;
       if (map && map.userData.round) { map.dispose(); mt.dispose(); }
+      else if (mt.userData?.round) mt.dispose();
     }
   });
   (old.scene.background as THREE.Texture | null)?.dispose();

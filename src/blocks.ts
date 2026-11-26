@@ -76,6 +76,8 @@ export class DoorWall extends Hazard {
   private choice = new Map<Actor, number>();
   private half: number;
   private T = 0.3;
+  private fadeMats: THREE.Material[] = [];
+  private fadeAlpha = 1;
   /** Called when the player opens a real door (true) or bumps a fake one for the first time (false). */
   onPlayer?: (ok: boolean) => void;
   constructor(public x: number, public y: number, public z: number, public real: boolean[], colors: string[], private doorW = 2.6, private postW = 0.6, labels?: string[]) {
@@ -84,25 +86,38 @@ export class DoorWall extends Hazard {
     this.open = real.map(() => false);
     this.wob = real.map(() => 0);
     this.half = (n * doorW + (n + 1) * postW) / 2;
-    const post = mat('#7b6cf6');
+    const wallMat = (color: string) => {
+      const m = new THREE.MeshToonMaterial({ color, gradientMap: toonGradient() });
+      m.userData.round = true;
+      this.fadeMats.push(m);
+      return m;
+    };
+    const post = wallMat('#7b6cf6');
     for (let i = 0; i <= n; i++) {
       const p = new THREE.Mesh(geo('post' + postW, () => new THREE.BoxGeometry(postW, 3.6, 0.7)), post);
       p.position.set(-this.half + postW / 2 + i * (doorW + postW), 1.8, 0);
       this.mesh.add(p);
     }
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(this.half * 2 + 0.4, 0.7, 0.9), mat('#ffffff'));
+    const white = wallMat('#ffffff');
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(this.half * 2 + 0.4, 0.7, 0.9), white);
     beam.position.y = 3.75;
     this.mesh.add(beam);
+    const doorMats = new Map<string, THREE.MeshToonMaterial>();
     for (let i = 0; i < n; i++) {
-      const m = new THREE.Mesh(geo('door' + doorW, () => new THREE.BoxGeometry(doorW, 3.3, 0.28)), mat(colors[i % colors.length]));
+      const col = colors[i % colors.length];
+      let dm = doorMats.get(col);
+      if (!dm) { dm = wallMat(col); doorMats.set(col, dm); }
+      const m = new THREE.Mesh(geo('door' + doorW, () => new THREE.BoxGeometry(doorW, 3.3, 0.28)), dm);
       m.position.set(this.cx(i), 1.72, 0);
-      const knob = new THREE.Mesh(geo('knob', () => new THREE.SphereGeometry(0.16, 10, 8)), mat('#ffffff'));
+      const knob = new THREE.Mesh(geo('knob', () => new THREE.SphereGeometry(0.16, 10, 8)), white);
       knob.position.set(doorW * 0.32, -0.1, 0.2);
       m.add(knob);
       if (labels) {
         const tex = textTexture(labels[i], { w: 512, h: 256, bg: '#ffffff', fg: '#2a2036', border: '#2a2036', rtl: /[֐-׿]/.test(labels[i]) });
         tex.userData.round = true;
-        const sign = new THREE.Mesh(new THREE.PlaneGeometry(doorW * 0.9, doorW * 0.45), new THREE.MeshBasicMaterial({ map: tex }));
+        const sm = new THREE.MeshBasicMaterial({ map: tex });
+        this.fadeMats.push(sm);
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(doorW * 0.9, doorW * 0.45), sm);
         sign.position.set(0, 0.45, 0.16);
         m.add(sign);
         knob.visible = false;
@@ -111,6 +126,17 @@ export class DoorWall extends Hazard {
       this.panels.push(m);
     }
     this.mesh.position.set(x, y, z);
+  }
+  /** Fade the wall semi-transparent when it sits between the camera and the player. */
+  setFade(alpha: number): void {
+    if (Math.abs(alpha - this.fadeAlpha) < 0.005) return;
+    this.fadeAlpha = alpha;
+    const trans = alpha < 0.99;
+    for (const m of this.fadeMats) {
+      if (m.transparent !== trans) { m.transparent = trans; m.needsUpdate = true; }
+      m.opacity = alpha;
+      m.depthWrite = !trans;
+    }
   }
   /** Centre of door i, relative to the wall centre. */
   private cx(i: number): number { return -this.half + this.postW + this.doorW / 2 + i * (this.doorW + this.postW); }

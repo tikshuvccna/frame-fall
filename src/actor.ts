@@ -32,6 +32,7 @@ class Spring {
 }
 
 let shadowGeo: THREE.CircleGeometry | null = null, shadowMat: THREE.MeshBasicMaterial | null = null;
+let xrayMat: THREE.MeshBasicMaterial | null = null;
 
 export class Actor {
   x = 0; y = 0; z = 0;
@@ -123,6 +124,24 @@ export class Actor {
       else m.material = gm;
     });
     this.shadow.visible = false;
+  }
+
+  /** Draw a golden silhouette only where the runner is hidden behind an obstacle (GreaterDepth). */
+  enableXray(): void {
+    xrayMat ??= new THREE.MeshBasicMaterial({
+      color: 0xffd23f,
+      transparent: true,
+      opacity: 0.55,
+      depthTest: true,
+      depthFunc: THREE.GreaterDepth,
+      depthWrite: false,
+    });
+    for (const part of Object.values(this.rig.parts)) {
+      const x = new THREE.Mesh(part.geometry, xrayMat);
+      x.renderOrder = 50;
+      x.raycast = () => {};
+      part.add(x);
+    }
   }
 
   private hatSpin: THREE.Object3D | null = null;
