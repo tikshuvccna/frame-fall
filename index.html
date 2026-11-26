@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#7b6cf6">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700;800;900&display=swap">
   <link rel="icon" href="data:,">
   <title>המרוץ לכתר</title>
 </head>
@@ -17,9 +20,18 @@
     <div id="host"></div>
   </div>
   <button id="volBtn" type="button" aria-label="עוצמת קול">🔊</button>
+  <button id="pauseBtn" type="button" aria-label="השהיה" title="השהיה (Esc)">⏸</button>
   <div id="volBox" class="hide">
     <label><span>מוזיקה</span><input id="volMusic" type="range" min="0" max="1" step="0.1"></label>
     <label><span>צלילים</span><input id="volSound" type="range" min="0" max="1" step="0.1"></label>
+  </div>
+  <div id="pause" class="card hide">
+    <h1>המשחק מושהה</h1>
+    <div class="row">
+      <button id="pauseResume" type="button" class="big">המשך</button>
+      <button id="pauseRestart" type="button" class="big alt">התחל מחדש</button>
+      <button id="pauseMenu" type="button" class="big alt">חזרה למופע</button>
+    </div>
   </div>
   <div id="toast"></div>
   <div id="count"></div>

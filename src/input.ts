@@ -6,7 +6,9 @@ let jumpEdge = false, diveEdge = false, jumpHeld = false;
 let stickX = 0, stickZ = 0, stickId = -1, sx0 = 0, sy0 = 0;
 
 export function initInput(): void {
+  const isTyping = (t: EventTarget | null) => t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
   window.addEventListener('keydown', (e) => {
+    if (isTyping(e.target) || !document.body.classList.contains('playing')) return;
     if (e.repeat) return;
     keys.add(e.code);
     if (e.code === 'Space') { jumpEdge = true; e.preventDefault(); }

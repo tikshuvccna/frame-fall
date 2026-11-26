@@ -56,6 +56,8 @@ function applySettings(): void {
   resize();
 }
 let game: Round | null = null;
+let paused = false;
+let prizeTimer = 0;
 let sel = 0;                                                   // selected ticket on the board
 let mini: { ls: Lesson; level: number } | null = null;         // the answer-door game being played, if any
 let shownRound = -1;
@@ -204,8 +206,10 @@ function playDaily(): void {
 }
 
 function showBoard(): void {
+  paused = false;
+  if (prizeTimer) { clearTimeout(prizeTimer); prizeTimer = 0; }
   document.body.classList.remove('playing');
-  for (const id of ['hud', 'end', 'mini', 'lesson', 'panel', 'prize']) $(id).classList.add('hide');
+  for (const id of ['hud', 'end', 'mini', 'lesson', 'panel', 'prize', 'pause', 'volBox']) $(id).classList.add('hide');
   document.body.classList.remove('preview');
   daily = null;
   $('card').classList.remove('hide');
@@ -331,16 +335,24 @@ function startMini(ls: Lesson, level: number): void {
   begin();
 }
 
+function setPaused(on: boolean): void {
+  if (!document.body.classList.contains('playing') || !game || game.phase === 'done') return;
+  paused = on;
+  $('pause').classList.toggle('hide', !on);
+  if (on) $('volBox').classList.add('hide');
+}
+
 // ------------------------------------------------------------------ a round starts and ends
 function begin(): void {
   unlockAudio();
-  for (const id of ['card', 'end', 'mini', 'lesson', 'panel', 'prize']) $(id).classList.add('hide');
+  paused = false;
+  if (prizeTimer) { clearTimeout(prizeTimer); prizeTimer = 0; }
+  for (const id of ['card', 'end', 'mini', 'lesson', 'panel', 'prize', 'pause', 'volBox']) $(id).classList.add('hide');
   $('hud').classList.remove('hide');
   document.body.classList.add('playing');
   const d = game?.def;
   playMusic(mini ? 'race' : d?.id === 'crown' || d?.id === 'storm' ? 'final' : d?.mode !== 'race' ? 'survive' : 'race');
   $('host').classList.remove('on');
-  $('volBox').classList.add('hide');
   preload('victory');
   game?.start();
 }
@@ -469,7 +481,8 @@ function finishEnd(r: Result, parts: string[]): void {
   coinify($('endPurse')); coinify($('endGain'));
   store();
   $('end').classList.remove('hide');
-  if (won.length) setTimeout(() => announce(won), 900);
+  if (prizeTimer) clearTimeout(prizeTimer);
+  if (won.length) prizeTimer = window.setTimeout(() => { prizeTimer = 0; if (!document.body.classList.contains('playing')) announce(won); }, 900);
 }
 
 let last = performance.now(), acc = 0, hudText = '', shownCoins = -1;
@@ -485,6 +498,7 @@ function frame(now: number): void {
     return;
   }
   if (!game) return;
+  if (paused) { renderer.render(game.scene, game.camera); return; }
   acc += dt;
   let n = 0;
   while (acc >= STEP && n < 5) {
@@ -533,6 +547,27 @@ async function boot(): Promise<void> {
   vs.onchange = () => { sfx.coin(); vm.blur(); vs.blur(); };
   vm.onchange = () => { vm.blur(); vs.blur(); };
   syncVol();
+  document.addEventListener('pointerdown', (e) => {
+    const vb = $('volBox');
+    if (vb.classList.contains('hide')) return;
+    const t = e.target as HTMLElement | null;
+    if (t && !t.closest('#volBox, #volBtn')) vb.classList.add('hide');
+  });
+  $('pauseBtn').onclick = () => { sfx.click(); setPaused(!paused); };
+  $('pauseResume').onclick = () => { sfx.click(); setPaused(false); };
+  $('pauseRestart').onclick = () => {
+    sfx.click();
+    if (mini) startMini(mini.ls, mini.level);
+    else if (daily) playDaily();
+    else { shownRound = -1; showRoundOf(sel, true); begin(); }
+  };
+  $('pauseMenu').onclick = () => { sfx.click(); mini = null; shownRound = -1; showBoard(); };
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Escape' || e.repeat) return;
+    if (!$('volBox').classList.contains('hide')) { $('volBox').classList.add('hide'); return; }
+    if (!$('panel').classList.contains('hide')) { ($('panel').querySelector('.x') as HTMLButtonElement | null)?.click(); return; }
+    if (document.body.classList.contains('playing')) setPaused(!paused);
+  });
   $('season').onclick = () => { sfx.click(); openPanel('season'); };
   $('go').onclick = () => {
     const x = ITEMS[sel];
